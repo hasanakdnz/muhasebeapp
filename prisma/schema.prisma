@@ -1,0 +1,178 @@
+// Muhasebe / ön muhasebe uygulaması — çekirdek şema
+// Kaynak: ROADMAP.md "Veritabanı Şeması". Geliştirme fazında SQLite kullanılır;
+// PostgreSQL'e geçiş ROADMAP.md Faz 9'da ele alınacak.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  ADMIN
+  PERSONEL
+}
+
+enum CariTipi {
+  MUSTERI
+  TEDARIKCI
+  HER_IKISI
+}
+
+enum IslemTipi {
+  SATIS
+  ALIS
+}
+
+enum OdemeStatusu {
+  ODENDI
+  KISMI_ODENDI
+  BEKLIYOR
+  IPTAL
+}
+
+enum CekSenetTipi {
+  CEK
+  SENET
+}
+
+enum CekSenetDurumu {
+  PORTFOYDE
+  CIRO_EDILDI
+  TAHSIL_EDILDI
+  KARSILIKSIZ
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  // Auth.js Credentials provider için gerekli; ROADMAP şemasına eklenen tek alan.
+  passwordHash String
+  role         Role       @default(PERSONEL)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+}
+
+model Cari {
+  id           String     @id @default(cuid())
+  unvan        String
+  vknTckn      String?
+  vergiDairesi String?
+  tip          CariTipi
+  telefon      String?
+  email        String?
+  adres        String?
+  bakiye       Decimal    @default(0) // pozitif: alacak, negatif: borç
+  islemler     Islem[]
+  cekSenetler  CekSenet[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([unvan])
+  @@index([tip])
+}
+
+model Islem {
+  id          String        @id @default(cuid())
+  tip         IslemTipi
+  cariId      String
+  // Restrict: işlemi olan cari silinemez — muhasebe kaydı sessizce yok edilmemeli.
+  cari        Cari          @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  kalemler    IslemKalemi[]
+  toplamTutar Decimal
+  kdvTutari   Decimal
+  status      OdemeStatusu  @default(BEKLIYOR)
+  odenenTutar Decimal       @default(0)
+  vadeTarihi  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([cariId])
+  @@index([status])
+  @@index([vadeTarihi])
+}
+
+model IslemKalemi {
+  id         String  @id @default(cuid())
+  islemId    String
+  islem      Islem   @relation(fields: [islemId], references: [id], onDelete: Cascade)
+  urunAdi    String
+  miktar     Decimal
+  birimFiyat Decimal
+  kdvOrani   Decimal
+
+  @@index([islemId])
+}
+
+model KasaBanka {
+  id         String          @id @default(cuid())
+  ad         String
+  tip        String // "KASA" | "BANKA"
+  bakiye     Decimal         @default(0)
+  hareketler HesapHareketi[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+}
+
+model HesapHareketi {
+  id       String    @id @default(cuid())
+  hesapId  String
+  hesap    KasaBanka @relation(fields: [hesapId], references: [id], onDelete: Restrict)
+  tutar    Decimal // + giriş, - çıkış
+  aciklama String?
+  tarih    DateTime  @default(now())
+
+  @@index([hesapId])
+  @@index([tarih])
+}
+
+model CekSenet {
+  id           String         @id @default(cuid())
+  tip          CekSenetTipi
+  cariId       String
+  cari         Cari           @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  tutar        Decimal
+  tahsilEdilen Decimal        @default(0)
+  vadeTarihi   DateTime
+  durum        CekSenetDurumu @default(PORTFOYDE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([cariId])
+  @@index([durum])
+  @@index([vadeTarihi])
+}
+
+model Gider {
+  id        String   @id @default(cuid())
+  kategori  String
+  tutar     Decimal
+  aciklama  String?
+  belgeUrl  String? // fiş/dekont görseli
+  tarih     DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kategori])
+  @@index([tarih])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  aksiyon   String // "DELETE", "UPDATE", "PARTIAL_PAYMENT" vb.
+  hedefTip  String // "Islem", "CekSenet" vb.
+  hedefId   String
+  detay     Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([hedefTip, hedefId])
+  @@index([createdAt])
+}

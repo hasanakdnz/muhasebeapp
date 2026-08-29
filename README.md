@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Muhasebe
 
-## Getting Started
+Türkiye'deki KOBİ'ler için finans/ön muhasebe web uygulaması.
 
-First, run the development server:
+Faz bazlı geliştiriliyor — plan için **ROADMAP.md**, görsel dil için **DESIGN.md**,
+genel kurallar için **CLAUDE.md**.
+
+## Kurulum
 
 ```bash
+npm install                 # postinstall Prisma client'ı üretir
+cp .env.example .env        # AUTH_SECRET'i doldurun: npx auth secret
+npx prisma migrate dev      # SQLite şemasını uygular
+npm run db:seed             # geliştirme kullanıcılarını ekler
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Geliştirme hesapları (yalnızca yerel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| E-posta | Şifre | Rol |
+| --- | --- | --- |
+| `admin@muhasebe.local` | `Admin1234!` | ADMIN |
+| `personel@muhasebe.local` | `Personel1234!` | PERSONEL |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Komutlar
 
-## Learn More
+| Komut | Açıklama |
+| --- | --- |
+| `npm run dev` | Geliştirme sunucusu |
+| `npm run build` | Production build — her fazdan sonra hatasız geçmeli |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest test suite |
+| `npm run db:migrate` | Şema değişikliklerini uygular |
+| `npm run db:seed` | Geliştirme verisini yükler |
+| `npm run db:studio` | Prisma Studio |
 
-To learn more about Next.js, take a look at the following resources:
+## Mimari notlar
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Veritabanı:** SQLite (`prisma/dev.db`). PostgreSQL'e geçiş ROADMAP.md Faz 9.
+  Prisma 7 driver adapter zorunlu kıldığı için `@prisma/adapter-better-sqlite3`
+  kullanılıyor; geçişte yalnızca `lib/prisma.ts` içindeki adapter değişecek.
+- **Auth:** Auth.js v5, Credentials provider, JWT oturum (Credentials veritabanı
+  oturumunu desteklemez). Yetki politikası tek yerde: `lib/rbac.ts`.
+- **Edge/Node ayrımı:** `middleware.ts` Edge runtime'da çalışır ve Prisma'ya
+  dokunamaz; bu yüzden config `lib/auth.config.ts` (edge-safe) ve `lib/auth.ts`
+  (provider'lar, Node) olarak ikiye ayrılmıştır.
+- **Para birimi:** `lib/money.ts`. Tüm hesap ve biçimlendirme `Decimal` üzerinden
+  yapılır, float'a hiç düşülmez — `Intl.NumberFormat` `number` aldığı için
+  kullanılmaz. Tutarlar UI'da her zaman `data-numeric` ile gösterilir.
+- **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek
+  değerdir: `rounded-app` (8px), rozetler `rounded-full`.
