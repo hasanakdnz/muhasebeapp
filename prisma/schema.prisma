@@ -39,6 +39,11 @@ enum CekSenetTipi {
   SENET
 }
 
+enum CekSenetYonu {
+  ALINAN // müşteriden alındı — tahsil edeceğiz (varlık)
+  VERILEN // tedarikçiye verildi — ödeyeceğiz (yükümlülük)
+}
+
 enum CekSenetDurumu {
   PORTFOYDE
   CIRO_EDILDI
@@ -157,20 +162,44 @@ model HesapHareketi {
 }
 
 model CekSenet {
-  id           String         @id @default(cuid())
-  tip          CekSenetTipi
-  cariId       String
-  cari         Cari           @relation(fields: [cariId], references: [id], onDelete: Restrict)
-  tutar        Decimal
-  tahsilEdilen Decimal        @default(0)
+  id     String       @id @default(cuid())
+  tip    CekSenetTipi
+  // Yön, tahsilatın cari bakiyesine hangi işaretle yansıyacağını belirler:
+  // ALINAN tahsil edilince carinin bize borcu azalır, VERILEN ödenince
+  // bizim borcumuz azalır. ROADMAP şemasına eklenen alan.
+  yon    CekSenetYonu
+  cariId String
+  cari   Cari         @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  tutar  Decimal
+  // Tahsil edilen toplam. HER ZAMAN Σ CekSenetTahsilat.tutar değerine eşittir;
+  // elle yazılmaz, cekSenetiDogrula() ile mutabakatı ölçülür.
+  tahsilEdilen Decimal          @default(0)
   vadeTarihi   DateTime
-  durum        CekSenetDurumu @default(PORTFOYDE)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  durum        CekSenetDurumu   @default(PORTFOYDE)
+  aciklama     String?
+  tahsilatlar  CekSenetTahsilat[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([cariId])
   @@index([durum])
   @@index([vadeTarihi])
+  @@index([yon])
+}
+
+/// Kısmi tahsilatlar tek tek kaydedilir: "birden fazla kısmi tahsilat"
+/// izlenebilir ve tek tek geri alınabilir olmalı (ROADMAP Faz 4 doğrulaması).
+model CekSenetTahsilat {
+  id         String   @id @default(cuid())
+  cekSenetId String
+  cekSenet   CekSenet @relation(fields: [cekSenetId], references: [id], onDelete: Cascade)
+  tutar      Decimal
+  tarih      DateTime @default(now())
+  aciklama   String?
+  createdAt  DateTime @default(now())
+
+  @@index([cekSenetId])
+  @@index([tarih])
 }
 
 model Gider {

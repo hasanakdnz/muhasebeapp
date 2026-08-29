@@ -61,6 +61,16 @@ npm run dev
   `acilisBakiyesi + Σ(işlem etkisi)` değerine eşittir. Elle düzenlenmez; açılış
   bakiyesi değişirse yeniden hesaplanır. `cariBakiyesiniDogrula()` mutabakatı ölçer.
   Satış bakiyeyi artırır (cari size borçlanır), alış azaltır.
+- **Çek/senet ve kısmi tahsilat:** Kayıt cari bakiyesini DEĞİŞTİRMEZ; borç para
+  fiilen tahsil edildikçe kapanır. Böylece karşılıksız çıkan çekte düzeltme
+  gerekmez — borç zaten azalmamıştır. `ALINAN` tahsil edilince cari bakiyesi
+  düşer, `VERILEN` ödenince yükselir. Her tahsilat ayrı kayıttır ve
+  `tahsilEdilen = Σ tahsilat` değişmezi `cekSenetiDogrula()` ile ölçülür.
+  Kalandan fazla tahsilat engellenir. Şemada "kısmi tahsil" durumu olmadığı için
+  kısmen tahsil edilmiş kayıt PORTFOYDE kalır; tutar tamamlanınca otomatik
+  TAHSIL_EDILDI olur. `TAHSIL_EDILDI` elle seçilemez.
+- **Cari bakiyesinin iki kaynağı vardır:** satış/alış işlemleri ve çek/senet
+  tahsilatları. Mutabakat ikisini birden sayar.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

@@ -182,6 +182,7 @@ describe("Cari — sil", () => {
     await db.prisma.cekSenet.create({
       data: {
         tip: "CEK",
+        yon: "ALINAN",
         cariId: cari.id,
         tutar: "5000",
         vadeTarihi: new Date("2026-12-31"),

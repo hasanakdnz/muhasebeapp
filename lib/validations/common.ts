@@ -38,7 +38,8 @@ export const tutarAlani = (
         ctx.addIssue({ code: "custom", message: "Geçerli bir tutar girin." });
         return;
       }
-      if (secenek.pozitif && !roundMoney(parsed).isPositive()) {
+      // decimal.js: isPositive() sıfır için de true döner — greaterThan(0) şart.
+      if (secenek.pozitif && !roundMoney(parsed).greaterThan(0)) {
         ctx.addIssue({
           code: "custom",
           message: `${label} sıfırdan büyük olmalı.`,
@@ -83,7 +84,7 @@ export const sayiAlani = (secenek: {
         });
         return;
       }
-      if (secenek.pozitif && !parsed.isPositive()) {
+      if (secenek.pozitif && !parsed.greaterThan(0)) {
         ctx.addIssue({
           code: "custom",
           message: `${secenek.label} sıfırdan büyük olmalı.`,

@@ -6,6 +6,7 @@ import {
   cariBakiyesiMutabik,
   hesaplaCariBakiyesi,
 } from "@/lib/domain/islem";
+import { cariEtkisi as tahsilatCariEtkisi } from "@/lib/domain/cek-senet";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { CariTipiValue } from "@/lib/validations/cari";
 
@@ -72,6 +73,35 @@ function ortakAlanlar(veri: CariYaziVerisi) {
     adres: veri.adres ?? null,
     aramaAnahtari: aramaNormalize(veri.unvan),
   };
+}
+
+/**
+ * Cari yürüyen bakiyesini oluşturan TÜM etkiler.
+ *
+ * İki kaynak vardır ve ikisi de sayılmalıdır:
+ *  1. Satış/alış işlemleri (Faz 3)
+ *  2. Çek/senet tahsilatları (Faz 4)
+ *
+ * Biri unutulursa `bakiye = açılış + Σ etki` değişmezi yanlış alarm verir.
+ */
+async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
+  const [islemler, tahsilatlar] = await Promise.all([
+    db.islem.findMany({
+      where: { cariId },
+      select: { tip: true, toplamTutar: true },
+    }),
+    db.cekSenetTahsilat.findMany({
+      where: { cekSenet: { cariId } },
+      select: { tutar: true, cekSenet: { select: { yon: true } } },
+    }),
+  ]);
+
+  return [
+    ...islemler.map((i) => cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())),
+    ...tahsilatlar.map((t) =>
+      tahsilatCariEtkisi(t.cekSenet.yon, t.tutar.toString())
+    ),
+  ];
 }
 
 function aramaKosulu(q: string) {
@@ -169,8 +199,8 @@ export async function cariOlustur(
 
 /**
  * Cariyi günceller. Açılış bakiyesi değişirse yürüyen bakiye YENİDEN hesaplanır
- * (açılış + Σ işlem etkileri) — `bakiye` hiçbir zaman doğrudan yazılmaz,
- * aksi halde değişmez bozulurdu.
+ * (açılış + Σ işlem etkileri + Σ tahsilat etkileri) — `bakiye` hiçbir zaman
+ * doğrudan yazılmaz, aksi halde değişmez bozulurdu.
  */
 export async function cariGuncelle(
   id: string,
@@ -180,13 +210,7 @@ export async function cariGuncelle(
   const acilis = roundMoney(veri.acilisBakiyesi).toString();
 
   await db.$transaction(async (tx) => {
-    const islemler = await tx.islem.findMany({
-      where: { cariId: id },
-      select: { tip: true, toplamTutar: true },
-    });
-    const etkiler = islemler.map((i) =>
-      cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())
-    );
+    const etkiler = await cariEtkileri(id, tx as Db);
 
     await tx.cari.update({
       where: { id },
@@ -224,8 +248,8 @@ export async function cariSilinebilirMi(
 }
 
 /**
- * Mutabakat: saklanan yürüyen bakiye, açılış + işlem etkileriyle tutuyor mu?
- * Kasa/Banka'daki hesapBakiyesiniDogrula ile aynı disiplin.
+ * Mutabakat: saklanan yürüyen bakiye, açılış + işlem + tahsilat etkileriyle
+ * tutuyor mu? Kasa/Banka'daki hesapBakiyesiniDogrula ile aynı disiplin.
  */
 export async function cariBakiyesiniDogrula(
   id: string,
@@ -237,13 +261,7 @@ export async function cariBakiyesiniDogrula(
   });
   if (!cari) throw new Error("Cari bulunamadı.");
 
-  const islemler = await db.islem.findMany({
-    where: { cariId: id },
-    select: { tip: true, toplamTutar: true },
-  });
-  const etkiler = islemler.map((i) =>
-    cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())
-  );
+  const etkiler = await cariEtkileri(id, db);
 
   return {
     mutabik: cariBakiyesiMutabik(
