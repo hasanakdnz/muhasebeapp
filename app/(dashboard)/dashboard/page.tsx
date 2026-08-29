@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { NakitAkisi } from "@/components/dashboard/nakit-akisi";
 import { SayanTutar } from "@/components/dashboard/sayan-tutar";
+import { Amount } from "@/components/ui/amount";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel, CardTitle } from "@/components/ui/card";
 import { aylikNakitAkisi, dashboardOzeti } from "@/lib/dashboard";
+import { vadePanosu } from "@/lib/vade";
 import type { AmountTone } from "@/lib/money";
 
 export const metadata: Metadata = { title: "Genel Bakış · Muhasebe" };
@@ -33,9 +37,10 @@ function OzetKarti({
 
 export default async function DashboardPage() {
   const bugun = new Date();
-  const [ozet, nakitAkisi] = await Promise.all([
+  const [ozet, nakitAkisi, vade] = await Promise.all([
     dashboardOzeti(bugun),
     aylikNakitAkisi(bugun),
+    vadePanosu(bugun),
   ]);
 
   return (
@@ -74,6 +79,40 @@ export default async function DashboardPage() {
           aciklama={ozet.donemEtiketi}
         />
       </div>
+
+      {/* Vade uyarısı yalnızca dikkat gerektiren bir şey varsa görünür —
+          sürekli duran nötr bir kart göz ardı edilmeye başlanır. */}
+      {(vade.gecen > 0 || vade.bugunVadeli > 0 || vade.yaklasan > 0) && (
+        <Card className="flex flex-col gap-4">
+          <CardTitle>Vade takibi</CardTitle>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <CardLabel>
+                Vadesi geçen ({vade.gecen})
+              </CardLabel>
+              <p className="mt-2 text-display-md">
+                <Amount value={vade.gecenTutar} tone="negative" />
+              </p>
+            </div>
+            <div>
+              <CardLabel>
+                Yaklaşan ({vade.bugunVadeli + vade.yaklasan})
+              </CardLabel>
+              <p className="mt-2 text-display-md">
+                <Amount value={vade.yaklasanTutar} />
+              </p>
+            </div>
+          </div>
+          <div>
+            <Link
+              href="/cek-senet?vade=gecen"
+              className={buttonVariants({ variant: "secondary" })}
+            >
+              Vadesi geçenleri gör
+            </Link>
+          </div>
+        </Card>
+      )}
 
       <Card className="flex flex-col gap-6">
         <CardTitle>Nakit akışı</CardTitle>

@@ -34,6 +34,19 @@ npm run dev
 | `npm run db:seed` | Geliştirme verisini yükler |
 | `npm run db:studio` | Prisma Studio |
 
+## Vade bildirimi (cron)
+
+Vadesi geçen/yaklaşan çek-senetleri yöneticilere bildiren job dış bir
+zamanlayıcı tarafından çağrılır. `.env` içindeki `CRON_SECRET` tanımlı değilse
+uç nokta devre dışıdır (kapalı başarısız olur).
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET"   http://localhost:3000/api/cron/vade-bildirimi
+```
+
+Gönderim şimdilik konsola yazar (bkz. `lib/bildirim.ts`). Gerçek SMTP eklemek
+için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek yeterli.
+
 ## Mimari notlar
 
 - **Veritabanı:** SQLite (`prisma/dev.db`). PostgreSQL'e geçiş ROADMAP.md Faz 9.
@@ -88,6 +101,12 @@ npm run dev
   girmez), içerik imzası (magic bytes) denetimi, dizin geçişine kapalı anahtar
   kalıbı, oturum zorunlu servis rotası, `nosniff` + kısıtlayıcı CSP.
   `lib/storage.ts` `server-only` ile işaretlidir; client'a sızarsa build kırılır.
+- **Vade takibi:** Gün karşılaştırması TAKVİM GÜNÜ üzerinden yapılır; vade gün
+  başına kaydedildiği için düz zaman damgası karşılaştırması bugün vadesi gelen
+  kaydı saat 00:01'den itibaren "gecikmiş" gösterirdi. Vade rozetleri YALNIZCA
+  çek/senette gösterilir: `Islem.odenenTutar`/`status` henüz güncellenmediğinden
+  fatura bazında ödeme durumu bilinmiyor ve faturaya gecikme rozeti koymak
+  parasını almış olduğunuz faturaları da gecikmiş gösterirdi.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

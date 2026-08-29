@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { CekSenetActions } from "@/components/cek-senet/cek-senet-actions";
 import { DurumBadge } from "@/components/cek-senet/durum-badge";
+import { VadeBadge } from "@/components/ui/vade-badge";
 import { CiroPaneli } from "@/components/cek-senet/ciro-panel";
 import { TahsilatPaneli } from "@/components/cek-senet/tahsilat-panel";
 import { Amount } from "@/components/ui/amount";
@@ -94,8 +95,12 @@ export default async function CekSenetDetayPage({
           <p className="mt-2 text-heading-md text-ink">
             {formatTarih(kayit.vadeTarihi)}
           </p>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <DurumBadge durum={kayit.durum} />
+            {/* Vade rozeti yalnızca portföydeki kayıtlarda anlamlı. */}
+            {kayit.durum === "PORTFOYDE" && (
+              <VadeBadge vadeTarihi={kayit.vadeTarihi} bugun={new Date()} />
+            )}
           </div>
         </Card>
       </div>
