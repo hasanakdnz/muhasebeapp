@@ -129,3 +129,25 @@ describe("parseAmountInput", () => {
     expect(parseAmountInput("12abc")).toBeNull();
   });
 });
+
+describe("formatAmount → parseAmountInput gidiş-dönüşü", () => {
+  it("biçimlendirilmiş tutar kayıpsız geri okunur", () => {
+    // Düzenleme formu bakiyeyi biçimlendirilmiş gösterir; kaydederken aynı
+    // değere geri dönmesi şart.
+    for (const ham of [
+      "0",
+      "1500.5",
+      "-15200.4",
+      "1234567.89",
+      "-0.01",
+      "999999999.99",
+    ]) {
+      const gosterim = formatAmount(ham);
+      const geri = parseAmountInput(gosterim);
+      expect(geri, `girdi: ${ham} → "${gosterim}"`).not.toBeNull();
+      expect(roundMoney(geri!).toString(), `girdi: ${ham}`).toBe(
+        roundMoney(ham).toString()
+      );
+    }
+  });
+});

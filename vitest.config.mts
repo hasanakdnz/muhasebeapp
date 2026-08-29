@@ -7,6 +7,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["tests/setup.ts"],
     include: ["tests/**/*.test.ts"],
+    // Entegrasyon testleri geçici veritabanı kurduğu için varsayılan 5sn yetmez.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
   },
 });

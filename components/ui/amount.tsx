@@ -4,6 +4,7 @@ import {
   amountTone,
   formatSignedTRY,
   formatTRY,
+  type AmountTone,
   type DecimalLike,
 } from "@/lib/money";
 
@@ -13,37 +14,46 @@ import {
  * CLAUDE.md kuralı: tutarlar HER ZAMAN `data-numeric` (IBM Plex Mono) stiliyle
  * gösterilir. Renk varsayılan olarak nötrdür — DESIGN.md'ye göre ledger
  * tablolarında yalnızca tutar sütunu renklenir, "başka hiçbir sütunda renk
- * kullanılmaz". Bu yüzden renklendirme `colored` ile açıkça istenir.
+ * kullanılmaz". Bu yüzden renklendirme açıkça istenir.
  */
 export function Amount({
   value,
   colored = false,
+  tone,
   signed = false,
   currency = true,
   className,
   ...props
 }: Omit<React.HTMLAttributes<HTMLSpanElement>, "children"> & {
   value: DecimalLike;
-  /** green (pozitif) / red (negatif) uygula. Marka rengi asla tutar rengi değildir. */
+  /** İşaretten türetilen green/red renklendirmesi. */
   colored?: boolean;
+  /**
+   * Rengi açıkça belirler. "Toplam borç" gibi mutlak değer olarak saklanan
+   * ama anlamı negatif olan tutarlar için gerekir.
+   */
+  tone?: AmountTone | "neutral";
   /** Gelir `+`, gider `-` öneki (DESIGN.md Ledger Tables). */
   signed?: boolean;
   currency?: boolean;
 }) {
-  const text = signed
-    ? formatSignedTRY(value)
-    : formatTRY(value);
+  const text = signed ? formatSignedTRY(value) : formatTRY(value);
   const display = currency ? text : text.replace(" ₺", "");
 
-  const tone = colored ? amountTone(value) : "zero";
+  // Sıfır ne pozitif ne negatiftir — renk anlam taşımadığı için nötr kalır.
+  // Bu, açıkça `tone` verilse de geçerlidir (CLAUDE.md: renk yalnızca anlam taşır).
+  const sifirMi = amountTone(value) === "zero";
+  const efektifTon: AmountTone | "neutral" = sifirMi
+    ? "neutral"
+    : (tone ?? (colored ? amountTone(value) : "neutral"));
 
   return (
     <span
       data-numeric=""
       className={cn(
         "tabular-nums",
-        colored && tone === "positive" && "text-green",
-        colored && tone === "negative" && "text-red",
+        efektifTon === "positive" && "text-green",
+        efektifTon === "negative" && "text-red",
         className
       )}
       {...props}

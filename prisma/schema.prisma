@@ -67,7 +67,13 @@ model Cari {
   telefon      String?
   email        String?
   adres        String?
+  // Türkçe arama anahtarı: tr-locale küçük harf + şapka/nokta katlaması.
+  // SQLite LIKE yalnızca ASCII'de büyük/küçük ayrımı yapmadığı için gerekli.
+  aramaAnahtari String    @default("")
   bakiye       Decimal    @default(0) // pozitif: alacak, negatif: borç
+  // İşlem/çek kaydı olan cari silinemez (onDelete: Restrict); bunun yerine
+  // pasife alınır. Muhasebe kaydı sessizce yok edilmemeli.
+  aktif        Boolean    @default(true)
   islemler     Islem[]
   cekSenetler  CekSenet[]
   createdAt    DateTime   @default(now())
@@ -75,6 +81,8 @@ model Cari {
 
   @@index([unvan])
   @@index([tip])
+  @@index([aktif])
+  @@index([aramaAnahtari])
 }
 
 model Islem {
