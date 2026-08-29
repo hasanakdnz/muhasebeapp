@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { roundMoney } from "@/lib/money";
 import {
   cariEtkisi,
+  ciroEtkileri,
+  ciroKontrol,
   durumDegisikligiKontrol,
   hesaplaTahsilat,
   sonrakiDurum,
@@ -36,6 +38,9 @@ export type CekSenetSatiri = {
   vadeTarihi: Date;
   durum: CekSenetDurumuValue;
   aciklama: string | null;
+  ciroEdilenCariId: string | null;
+  ciroEdilenCariUnvan: string | null;
+  ciroTarihi: Date | null;
 };
 
 export type TahsilatSatiri = {
@@ -67,6 +72,9 @@ function satiraCevir(kayit: {
   vadeTarihi: Date;
   durum: CekSenetDurumuValue;
   aciklama: string | null;
+  ciroEdilenCariId: string | null;
+  ciroEdilenCari: { unvan: string } | null;
+  ciroTarihi: Date | null;
 }): CekSenetSatiri {
   const tutar = roundMoney(String(kayit.tutar));
   const tahsilEdilen = roundMoney(String(kayit.tahsilEdilen));
@@ -82,6 +90,9 @@ function satiraCevir(kayit: {
     vadeTarihi: kayit.vadeTarihi,
     durum: kayit.durum,
     aciklama: kayit.aciklama,
+    ciroEdilenCariId: kayit.ciroEdilenCariId,
+    ciroEdilenCariUnvan: kayit.ciroEdilenCari?.unvan ?? null,
+    ciroTarihi: kayit.ciroTarihi,
   };
 }
 
@@ -97,7 +108,10 @@ export async function listeleCekSenetler(
       ...(filtre.cariId ? { cariId: filtre.cariId } : {}),
     },
     orderBy: [{ vadeTarihi: "asc" }, { id: "asc" }],
-    include: { cari: { select: { unvan: true } } },
+    include: {
+      cari: { select: { unvan: true } },
+      ciroEdilenCari: { select: { unvan: true } },
+    },
   });
   return kayitlar.map(satiraCevir);
 }
@@ -110,6 +124,7 @@ export async function getCekSenet(
     where: { id },
     include: {
       cari: { select: { unvan: true } },
+      ciroEdilenCari: { select: { unvan: true } },
       tahsilatlar: { orderBy: [{ tarih: "asc" }, { id: "asc" }] },
     },
   });
@@ -372,6 +387,9 @@ export async function cekSenetSil(id: string, db: Db = prisma): Promise<void> {
         id: true,
         yon: true,
         cariId: true,
+        tutar: true,
+        durum: true,
+        ciroEdilenCariId: true,
         tahsilatlar: { select: { tutar: true } },
       },
     });
@@ -386,6 +404,28 @@ export async function cekSenetSil(id: string, db: Db = prisma): Promise<void> {
     let bakiye = roundMoney(cari.bakiye);
     for (const t of cekSenet.tahsilatlar) {
       bakiye = bakiye.plus(tersEtki(cariEtkisi(cekSenet.yon, t.tutar.toString())));
+    }
+
+    // Ciro edilmiş çek siliniyorsa cironun HER İKİ tarafındaki etki de geri
+    // alınmalı — cascade yalnızca satırları siler, bakiyeleri bilmez.
+    if (cekSenet.durum === "CIRO_EDILDI" && cekSenet.ciroEdilenCariId) {
+      const etkiler = ciroEtkileri(cekSenet.tutar.toString());
+      bakiye = bakiye.plus(tersEtki(etkiler.verenCari));
+
+      const hedef = await tx.cari.findUnique({
+        where: { id: cekSenet.ciroEdilenCariId },
+        select: { bakiye: true },
+      });
+      if (hedef) {
+        await tx.cari.update({
+          where: { id: cekSenet.ciroEdilenCariId },
+          data: {
+            bakiye: roundMoney(hedef.bakiye)
+              .plus(tersEtki(etkiler.alanCari))
+              .toString(),
+          },
+        });
+      }
     }
 
     await tx.cekSenet.delete({ where: { id } });
@@ -431,4 +471,150 @@ export async function cekSenetiDogrula(
     hesaplanan: ozet.tahsilEdilen,
     durumDogruMu: kayit.durum === beklenenDurum,
   };
+}
+
+/**
+ * Alınan çeki bir tedarikçiye ciro eder.
+ *
+ * Ciro edilen çek hiç tahsil edilmez ama değeri kullanılmıştır; bu yüzden
+ * AYNI transaction içinde İKİ cari bakiyesi birden güncellenir:
+ *  - çeki bize veren müşterinin borcu kapanır,
+ *  - çeki devrettiğimiz tedarikçiye olan borcumuz azalır.
+ */
+export async function ciroEt(
+  cekSenetId: string,
+  hedefCariId: string,
+  tarih: Date,
+  db: Db = prisma
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const cekSenet = await tx.cekSenet.findUnique({
+      where: { id: cekSenetId },
+      select: {
+        id: true,
+        yon: true,
+        durum: true,
+        tahsilEdilen: true,
+        cariId: true,
+        tutar: true,
+      },
+    });
+    if (!cekSenet) throw new Error("Çek/senet bulunamadı.");
+
+    const kontrol = ciroKontrol(
+      {
+        yon: cekSenet.yon,
+        durum: cekSenet.durum,
+        tahsilEdilen: cekSenet.tahsilEdilen.toString(),
+        cariId: cekSenet.cariId,
+      },
+      hedefCariId
+    );
+    if (!kontrol.gecerli) throw new Error(kontrol.hata);
+
+    const [veren, alan] = await Promise.all([
+      tx.cari.findUnique({
+        where: { id: cekSenet.cariId },
+        select: { bakiye: true },
+      }),
+      tx.cari.findUnique({
+        where: { id: hedefCariId },
+        select: { bakiye: true },
+      }),
+    ]);
+    if (!veren) throw new Error("Cari bulunamadı.");
+    if (!alan) throw new Error("Ciro edilecek cari bulunamadı.");
+
+    const etkiler = ciroEtkileri(cekSenet.tutar.toString());
+
+    await tx.cekSenet.update({
+      where: { id: cekSenetId },
+      data: {
+        durum: "CIRO_EDILDI",
+        ciroEdilenCariId: hedefCariId,
+        ciroTarihi: tarih,
+      },
+    });
+
+    await tx.cari.update({
+      where: { id: cekSenet.cariId },
+      data: {
+        bakiye: roundMoney(veren.bakiye).plus(etkiler.verenCari).toString(),
+      },
+    });
+    await tx.cari.update({
+      where: { id: hedefCariId },
+      data: {
+        bakiye: roundMoney(alan.bakiye).plus(etkiler.alanCari).toString(),
+      },
+    });
+  });
+}
+
+/** Ciroyu geri alır: her iki cari bakiyesi de eski hâline döner. */
+export async function ciroGeriAl(
+  cekSenetId: string,
+  db: Db = prisma
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const cekSenet = await tx.cekSenet.findUnique({
+      where: { id: cekSenetId },
+      select: {
+        id: true,
+        durum: true,
+        cariId: true,
+        tutar: true,
+        tahsilEdilen: true,
+        ciroEdilenCariId: true,
+      },
+    });
+    if (!cekSenet) throw new Error("Çek/senet bulunamadı.");
+    if (cekSenet.durum !== "CIRO_EDILDI" || !cekSenet.ciroEdilenCariId) {
+      throw new Error("Bu çek/senet ciro edilmemiş.");
+    }
+
+    const [veren, alan] = await Promise.all([
+      tx.cari.findUnique({
+        where: { id: cekSenet.cariId },
+        select: { bakiye: true },
+      }),
+      tx.cari.findUnique({
+        where: { id: cekSenet.ciroEdilenCariId },
+        select: { bakiye: true },
+      }),
+    ]);
+    if (!veren || !alan) throw new Error("Cari bulunamadı.");
+
+    const etkiler = ciroEtkileri(cekSenet.tutar.toString());
+
+    await tx.cekSenet.update({
+      where: { id: cekSenetId },
+      data: {
+        durum: sonrakiDurum(
+          "PORTFOYDE",
+          cekSenet.tutar.toString(),
+          cekSenet.tahsilEdilen.toString()
+        ),
+        ciroEdilenCariId: null,
+        ciroTarihi: null,
+      },
+    });
+
+    await tx.cari.update({
+      where: { id: cekSenet.cariId },
+      data: {
+        bakiye: roundMoney(veren.bakiye)
+          .plus(tersEtki(etkiler.verenCari))
+          .toString(),
+      },
+    });
+    await tx.cari.update({
+      where: { id: cekSenet.ciroEdilenCariId },
+      data: {
+        bakiye: roundMoney(alan.bakiye)
+          .plus(tersEtki(etkiler.alanCari))
+          .toString(),
+      },
+    });
+  });
 }

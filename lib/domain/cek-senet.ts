@@ -169,17 +169,20 @@ export function durumDegisikligiKontrol(
     };
   }
 
-  if (yeniDurum === "CIRO_EDILDI" && !roundMoney(cekSenet.tahsilEdilen).isZero()) {
+  // Ciro iki cari bakiyesini birden etkilediği ve hedef cari bilgisi
+  // gerektirdiği için düz bir durum değişikliği değildir; ciroEt/ciroGeriAl
+  // üzerinden yapılır.
+  if (yeniDurum === "CIRO_EDILDI") {
     return {
       gecerli: false,
-      hata: "Kısmen tahsil edilmiş çek/senet ciro edilemez.",
+      hata: "Ciro için hedef cariyi seçmeniz gerekir.",
     };
   }
 
-  if (yeniDurum === "KARSILIKSIZ" && cekSenet.durum === "CIRO_EDILDI") {
+  if (cekSenet.durum === "CIRO_EDILDI") {
     return {
       gecerli: false,
-      hata: "Ciro edilmiş çek/senet karşılıksız olarak işaretlenemez.",
+      hata: "Ciro edilmiş çekin durumu için önce ciroyu geri alın.",
     };
   }
 
@@ -246,5 +249,78 @@ export function hesaplaPortfoyOzeti(
     tahsilEdilecek: tahsilEdilecek.toString(),
     odenecek: odenecek.toString(),
     karsiliksiz: karsiliksiz.toString(),
+  };
+}
+
+export type CiroKontrolu = { gecerli: true } | { gecerli: false; hata: string };
+
+/**
+ * Ciro edilebilirlik kuralları.
+ *
+ * Ciro, bize verilmiş bir çeki bir tedarikçiye devretmektir. Bu yüzden:
+ *  - Yalnızca ALINAN çek ciro edilebilir; VERILEN çek zaten bizde değildir.
+ *  - Kısmen tahsil edilmiş çek ciro edilemez — çek tek parça bir senettir,
+ *    bir kısmını bozdurup kalanını devretmek mümkün değildir.
+ *  - Hedef cari zorunludur: ciro İKİ bakiyeyi birden etkiler, hedef
+ *    bilinmeden etki hesaplanamaz.
+ */
+export function ciroKontrol(
+  cekSenet: {
+    yon: CekSenetYonuValue;
+    durum: CekSenetDurumuValue;
+    tahsilEdilen: DecimalLike;
+    cariId: string;
+  },
+  hedefCariId: string
+): CiroKontrolu {
+  if (cekSenet.yon !== "ALINAN") {
+    return {
+      gecerli: false,
+      hata: "Yalnızca alınan çek/senet ciro edilebilir.",
+    };
+  }
+  if (cekSenet.durum !== "PORTFOYDE") {
+    return {
+      gecerli: false,
+      hata: "Yalnızca portföydeki çek/senet ciro edilebilir.",
+    };
+  }
+  if (!roundMoney(cekSenet.tahsilEdilen).isZero()) {
+    return {
+      gecerli: false,
+      hata: "Kısmen tahsil edilmiş çek/senet ciro edilemez.",
+    };
+  }
+  if (!hedefCariId.trim()) {
+    return { gecerli: false, hata: "Ciro edilecek cariyi seçin." };
+  }
+  if (hedefCariId === cekSenet.cariId) {
+    return {
+      gecerli: false,
+      hata: "Çek, kendisini veren cariye ciro edilemez.",
+    };
+  }
+  return { gecerli: true };
+}
+
+export type CiroEtkileri = {
+  /** Çeki bize veren müşteri: borcu kapanır → bakiye düşer. */
+  verenCari: string;
+  /** Çeki devrettiğimiz tedarikçi: ona borcumuz azalır → bakiye yükselir. */
+  alanCari: string;
+};
+
+/**
+ * Cironun iki taraflı bakiye etkisi.
+ *
+ * Ciro edilen çek hiç tahsil edilmez, ama değeri kullanılmıştır: müşteri
+ * borcunu ödemiş, biz de tedarikçiye ödeme yapmış oluruz. Bu yüzden ciro,
+ * tam tahsilat ile aynı büyüklükte fakat İKİ cariye yayılan bir etkidir.
+ */
+export function ciroEtkileri(tutar: DecimalLike): CiroEtkileri {
+  const t = roundMoney(tutar);
+  return {
+    verenCari: t.negated().toString(),
+    alanCari: t.toString(),
   };
 }

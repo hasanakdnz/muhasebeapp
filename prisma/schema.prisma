@@ -85,7 +85,9 @@ model Cari {
   // pasife alınır. Muhasebe kaydı sessizce yok edilmemeli.
   aktif        Boolean    @default(true)
   islemler     Islem[]
-  cekSenetler  CekSenet[]
+  cekSenetler  CekSenet[] @relation("CekSenetCari")
+  // Bize verilmiş bir çekin ciro edildiği cari (tedarikçi) tarafı.
+  ciroEdilenCekler CekSenet[] @relation("CiroEdilenCari")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -169,7 +171,13 @@ model CekSenet {
   // bizim borcumuz azalır. ROADMAP şemasına eklenen alan.
   yon    CekSenetYonu
   cariId String
-  cari   Cari         @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  cari   Cari         @relation("CekSenetCari", fields: [cariId], references: [id], onDelete: Restrict)
+  // Ciro: alınan çek bir tedarikçiye devredilir. Bu, İKİ cari bakiyesini birden
+  // etkiler (çeki veren müşterinin borcu kapanır, tedarikçiye borcumuz azalır),
+  // bu yüzden hedef cari kaydedilmek zorundadır — yoksa etki hesaplanamaz.
+  ciroEdilenCariId String?
+  ciroEdilenCari   Cari?    @relation("CiroEdilenCari", fields: [ciroEdilenCariId], references: [id], onDelete: Restrict)
+  ciroTarihi       DateTime?
   tutar  Decimal
   // Tahsil edilen toplam. HER ZAMAN Σ CekSenetTahsilat.tutar değerine eşittir;
   // elle yazılmaz, cekSenetiDogrula() ile mutabakatı ölçülür.
@@ -185,6 +193,7 @@ model CekSenet {
   @@index([durum])
   @@index([vadeTarihi])
   @@index([yon])
+  @@index([ciroEdilenCariId])
 }
 
 /// Kısmi tahsilatlar tek tek kaydedilir: "birden fazla kısmi tahsilat"

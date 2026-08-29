@@ -5,10 +5,12 @@ import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { CekSenetActions } from "@/components/cek-senet/cek-senet-actions";
 import { DurumBadge } from "@/components/cek-senet/durum-badge";
+import { CiroPaneli } from "@/components/cek-senet/ciro-panel";
 import { TahsilatPaneli } from "@/components/cek-senet/tahsilat-panel";
 import { Amount } from "@/components/ui/amount";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel, CardTitle } from "@/components/ui/card";
+import { listeleCariler } from "@/lib/cari";
 import { getCekSenet } from "@/lib/cek-senet";
 import { formatTarih, toDateInputValue } from "@/lib/date";
 import {
@@ -24,7 +26,7 @@ export default async function CekSenetDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const kayit = await getCekSenet(id);
+  const [kayit, cariler] = await Promise.all([getCekSenet(id), listeleCariler()]);
   if (!kayit) notFound();
 
   return (
@@ -77,7 +79,13 @@ export default async function CekSenetDetayPage({
           <p className="mt-2 text-display-md">
             <Amount
               value={kayit.kalan}
-              tone={kayit.yon === "ALINAN" ? "positive" : "negative"}
+              tone={
+                kayit.durum !== "PORTFOYDE"
+                  ? "neutral"
+                  : kayit.yon === "ALINAN"
+                    ? "positive"
+                    : "negative"
+              }
             />
           </p>
         </Card>
@@ -103,6 +111,15 @@ export default async function CekSenetDetayPage({
         <CardTitle>Tahsilatlar</CardTitle>
         <TahsilatPaneli
           cekSenet={kayit}
+          bugun={toDateInputValue(new Date())}
+        />
+      </Card>
+
+      <Card className="flex flex-col gap-6">
+        <CardTitle>Ciro</CardTitle>
+        <CiroPaneli
+          cekSenet={kayit}
+          cariler={cariler.map((c) => ({ id: c.id, unvan: c.unvan }))}
           bugun={toDateInputValue(new Date())}
         />
       </Card>

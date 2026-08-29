@@ -69,8 +69,14 @@ npm run dev
   Kalandan fazla tahsilat engellenir. Şemada "kısmi tahsil" durumu olmadığı için
   kısmen tahsil edilmiş kayıt PORTFOYDE kalır; tutar tamamlanınca otomatik
   TAHSIL_EDILDI olur. `TAHSIL_EDILDI` elle seçilemez.
-- **Cari bakiyesinin iki kaynağı vardır:** satış/alış işlemleri ve çek/senet
-  tahsilatları. Mutabakat ikisini birden sayar.
+- **Ciro:** Alınan çek bir tedarikçiye devredilebilir. Ciro İKİ cari bakiyesini
+  birden etkiler — çeki veren müşterinin borcu kapanır, çekin devredildiği
+  cariye olan borcumuz aynı tutarda azalır. Bu yüzden hedef cari zorunludur ve
+  ciro düz bir durum değişikliği değil, ayrı bir işlemdir (`ciroEt` /
+  `ciroGeriAl`). Yalnızca portföydeki, hiç tahsil edilmemiş ALINAN çek ciro edilebilir.
+- **Cari bakiyesinin üç kaynağı vardır:** satış/alış işlemleri ve çek/senet
+  tahsilatları ve ciro edilen çekler (hem veren hem alan tarafta). Mutabakat
+  üçünü birden sayar — yeni bir kaynak eklenirse `cariEtkileri()` güncellenmeli.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

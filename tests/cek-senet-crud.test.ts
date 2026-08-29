@@ -228,13 +228,12 @@ describe("Durum değişiklikleri", () => {
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 
-  it("kısmen tahsil edilmiş çek ciro edilemez", async () => {
+  it("ciro düz durum değişikliğiyle yapılamaz", async () => {
     const cari = await cariEkle("Ciro Denemesi", "5000");
     const cek = await cekEkle(cari.id, "5000");
-    await tahsilatEkle(cek.id, { tutar: "1000", tarih: gun(5) }, db.prisma);
 
     await expect(durumDegistir(cek.id, "CIRO_EDILDI", db.prisma)).rejects.toThrow(
-      /ciro edilemez/i
+      /hedef cariyi/i
     );
   });
 

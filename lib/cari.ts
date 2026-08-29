@@ -6,7 +6,10 @@ import {
   cariBakiyesiMutabik,
   hesaplaCariBakiyesi,
 } from "@/lib/domain/islem";
-import { cariEtkisi as tahsilatCariEtkisi } from "@/lib/domain/cek-senet";
+import {
+  cariEtkisi as tahsilatCariEtkisi,
+  ciroEtkileri,
+} from "@/lib/domain/cek-senet";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { CariTipiValue } from "@/lib/validations/cari";
 
@@ -78,14 +81,17 @@ function ortakAlanlar(veri: CariYaziVerisi) {
 /**
  * Cari yürüyen bakiyesini oluşturan TÜM etkiler.
  *
- * İki kaynak vardır ve ikisi de sayılmalıdır:
- *  1. Satış/alış işlemleri (Faz 3)
- *  2. Çek/senet tahsilatları (Faz 4)
+ * Üç kaynak vardır ve hepsi sayılmalıdır:
+ *  1. Satış/alış işlemleri
+ *  2. Çek/senet tahsilatları
+ *  3. Ciro edilen çekler — ciro İKİ cariyi birden etkiler: çeki veren
+ *     müşterinin borcu kapanır, çekin devredildiği tedarikçiye olan borcumuz
+ *     azalır. Bu yüzden cari hem "veren" hem "alan" tarafta aranır.
  *
  * Biri unutulursa `bakiye = açılış + Σ etki` değişmezi yanlış alarm verir.
  */
 async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
-  const [islemler, tahsilatlar] = await Promise.all([
+  const [islemler, tahsilatlar, ciroVerilen, ciroAlinan] = await Promise.all([
     db.islem.findMany({
       where: { cariId },
       select: { tip: true, toplamTutar: true },
@@ -94,6 +100,16 @@ async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
       where: { cekSenet: { cariId } },
       select: { tutar: true, cekSenet: { select: { yon: true } } },
     }),
+    // Bu carinin verdiği, sonra başkasına ciro edilen çekler.
+    db.cekSenet.findMany({
+      where: { cariId, durum: "CIRO_EDILDI" },
+      select: { tutar: true },
+    }),
+    // Başkasından alınıp BU cariye ciro edilen çekler.
+    db.cekSenet.findMany({
+      where: { ciroEdilenCariId: cariId, durum: "CIRO_EDILDI" },
+      select: { tutar: true },
+    }),
   ]);
 
   return [
@@ -101,6 +117,8 @@ async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
     ...tahsilatlar.map((t) =>
       tahsilatCariEtkisi(t.cekSenet.yon, t.tutar.toString())
     ),
+    ...ciroVerilen.map((c) => ciroEtkileri(c.tutar.toString()).verenCari),
+    ...ciroAlinan.map((c) => ciroEtkileri(c.tutar.toString()).alanCari),
   ];
 }
 
@@ -236,10 +254,13 @@ export async function cariSilinebilirMi(
   islemSayisi: number;
   cekSenetSayisi: number;
 }> {
-  const [islemSayisi, cekSenetSayisi] = await Promise.all([
+  const [islemSayisi, kendiCekleri, ciroEdilenler] = await Promise.all([
     db.islem.count({ where: { cariId: id } }),
     db.cekSenet.count({ where: { cariId: id } }),
+    // Bu cariye ciro edilmiş çekler de ona bağlı kayıttır.
+    db.cekSenet.count({ where: { ciroEdilenCariId: id } }),
   ]);
+  const cekSenetSayisi = kendiCekleri + ciroEdilenler;
   return {
     silinebilir: islemSayisi === 0 && cekSenetSayisi === 0,
     islemSayisi,

@@ -134,22 +134,24 @@ describe("durumDegisikligiKontrol — elle işaretleme", () => {
     ).toBe(true);
   });
 
-  it("kısmen tahsil edilmiş çek ciro edilemez", () => {
+  it("ciro düz durum değişikliğiyle yapılamaz — hedef cari gerekir", () => {
+    // Ciro İKİ cari bakiyesini birden etkiler ve hedef cari bilgisi ister;
+    // bu yüzden ayrı bir işlemdir (ciroKontrol / ciroEt).
     const r = durumDegisikligiKontrol(
-      { tahsilEdilen: "3000", durum: "PORTFOYDE" },
+      { tahsilEdilen: "0", durum: "PORTFOYDE" },
       "CIRO_EDILDI"
     );
     expect(r.gecerli).toBe(false);
-    expect(r.gecerli === false && r.hata).toMatch(/ciro edilemez/i);
+    expect(r.gecerli === false && r.hata).toMatch(/hedef cariyi/i);
   });
 
-  it("hiç tahsilat yapılmamış çek ciro edilebilir", () => {
-    expect(
-      durumDegisikligiKontrol(
-        { tahsilEdilen: "0", durum: "PORTFOYDE" },
-        "CIRO_EDILDI"
-      ).gecerli
-    ).toBe(true);
+  it("ciro edilmiş çekin durumu önce ciro geri alınmadan değiştirilemez", () => {
+    const r = durumDegisikligiKontrol(
+      { tahsilEdilen: "0", durum: "CIRO_EDILDI" },
+      "PORTFOYDE"
+    );
+    expect(r.gecerli).toBe(false);
+    expect(r.gecerli === false && r.hata).toMatch(/ciroyu geri alın/i);
   });
 
   it("TAHSIL_EDILDI elle seçilemez", () => {

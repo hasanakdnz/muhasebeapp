@@ -7,6 +7,8 @@ import {
   cekSenetGuncelle,
   cekSenetOlustur,
   cekSenetSil,
+  ciroEt,
+  ciroGeriAl,
   durumDegistir,
   tahsilatEkle,
   tahsilatSil,
@@ -46,6 +48,14 @@ function isKuraliHatasi(error: unknown): ActionResult | null {
   if (!(error instanceof Error)) return null;
   const bilinen = [
     "kalan tutardan büyük",
+    "Yalnızca alınan",
+    "Yalnızca portföydeki",
+    "kısmen tahsil",
+    "cariyi seçin",
+    "kendisini veren",
+    "ciro edilmemiş",
+    "hedef cariyi",
+    "ciroyu geri alın",
     "zaten tamamen tahsil",
     "tahsilat kaydedilemez",
     "ciro edilemez",
@@ -160,6 +170,57 @@ export async function setDurum(
   }
 
   tazele(cariId);
+  revalidatePath(`/cek-senet/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Ciro: alınan çeki bir tedarikçiye devreder. İki cari bakiyesini birden
+ * etkilediği için etkilenen HER İKİ cari sayfası da tazelenir.
+ */
+export async function ciroEtAction(
+  id: string,
+  cariId: string,
+  hedefCariId: string,
+  tarih: string
+): Promise<ActionResult> {
+  await requireUser();
+
+  const gecerliTarih = /^\d{4}-\d{2}-\d{2}$/.test(tarih.trim());
+  if (!gecerliTarih) return { ok: false, error: "Geçerli bir tarih girin." };
+  const [yil, ay, gun] = tarih.trim().split("-").map(Number);
+
+  try {
+    await ciroEt(id, hedefCariId, new Date(yil, ay - 1, gun));
+  } catch (error) {
+    const sonuc = isKuraliHatasi(error);
+    if (sonuc) return sonuc;
+    throw error;
+  }
+
+  tazele(cariId);
+  revalidatePath(`/cariler/${hedefCariId}`);
+  revalidatePath(`/cek-senet/${id}`);
+  return { ok: true };
+}
+
+export async function ciroGeriAlAction(
+  id: string,
+  cariId: string,
+  hedefCariId: string
+): Promise<ActionResult> {
+  await requireUser();
+
+  try {
+    await ciroGeriAl(id);
+  } catch (error) {
+    const sonuc = isKuraliHatasi(error);
+    if (sonuc) return sonuc;
+    throw error;
+  }
+
+  tazele(cariId);
+  revalidatePath(`/cariler/${hedefCariId}`);
   revalidatePath(`/cek-senet/${id}`);
   return { ok: true };
 }

@@ -135,7 +135,14 @@ export default async function CekSenetPage({
                 <LedgerCell className="text-muted">
                   {CEK_SENET_YON_ETIKETI[kayit.yon]}
                 </LedgerCell>
-                <LedgerCell>{kayit.cariUnvan}</LedgerCell>
+                <LedgerCell>
+                  {kayit.cariUnvan}
+                  {kayit.ciroEdilenCariUnvan && (
+                    <span className="block text-body-sm text-muted">
+                      → {kayit.ciroEdilenCariUnvan}
+                    </span>
+                  )}
+                </LedgerCell>
                 <LedgerCell>
                   <DurumBadge durum={kayit.durum} />
                 </LedgerCell>
@@ -146,9 +153,18 @@ export default async function CekSenetPage({
                   <Amount value={kayit.tahsilEdilen} />
                 </LedgerCell>
                 <LedgerCell numeric>
+                  {/* Kalan yalnızca PORTFOYDE kayıtlarda renklidir: ciro
+                      edilmiş veya karşılıksız bir kayıtta kalan tutar artık
+                      beklenen bir tahsilat/ödeme değildir, renk anlam taşımaz. */}
                   <Amount
                     value={kayit.kalan}
-                    tone={kayit.yon === "ALINAN" ? "positive" : "negative"}
+                    tone={
+                      kayit.durum !== "PORTFOYDE"
+                        ? "neutral"
+                        : kayit.yon === "ALINAN"
+                          ? "positive"
+                          : "negative"
+                    }
                   />
                 </LedgerCell>
               </LedgerRow>
