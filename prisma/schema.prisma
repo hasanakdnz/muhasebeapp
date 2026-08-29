@@ -212,11 +212,22 @@ model CekSenetTahsilat {
 }
 
 model Gider {
-  id        String   @id @default(cuid())
-  kategori  String
-  tutar     Decimal
+  id       String  @id @default(cuid())
+  kategori String
+  /// KDV DAHİL toplam tutar — fişin üzerindeki rakam. Islem.toplamTutar ile
+  /// aynı anlamda (brüt), böylece iki yerde farklı bir "tutar" kavramı olmaz.
+  tutar    Decimal
+  /// Yüzde olarak KDV oranı. Türkiye'de masraf fişleri KDV içerir ve bu tutar
+  /// Faz 7'deki KDV raporunda "indirilecek KDV" tarafını besler.
+  kdvOrani Decimal @default(0)
+  /// tutar içinden ayrılan KDV. Saklanır çünkü oran zamanla değişebilir;
+  /// geçmiş kayıt kendi dönemindeki KDV'sini korumalıdır.
+  kdvTutari Decimal @default(0)
   aciklama  String?
-  belgeUrl  String? // fiş/dekont görseli
+  /// Yüklenen fiş/dekontun depodaki anahtarı (bkz. lib/storage.ts).
+  belgeUrl  String?
+  /// Kullanıcının yüklediği dosyanın özgün adı — indirirken gösterilir.
+  belgeAdi  String?
   tarih     DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

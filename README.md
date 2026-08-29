@@ -77,6 +77,17 @@ npm run dev
 - **Cari bakiyesinin üç kaynağı vardır:** satış/alış işlemleri ve çek/senet
   tahsilatları ve ciro edilen çekler (hem veren hem alan tarafta). Mutabakat
   üçünü birden sayar — yeni bir kaynak eklenirse `cariEtkileri()` güncellenmeli.
+- **Gider ve KDV:** `Gider.tutar` KDV DAHİL toplamdır (fişin üzerindeki rakam);
+  KDV bu tutarın İÇİNDEN ayrılır (`tutar × oran / (100 + oran)`). Satış tarafında
+  KDV matrahın ÜSTÜNE eklenir — ikisi birbirinin tersidir ve testle sabitlenmiştir.
+  KDV daima sunucuda hesaplanır, istemciden gelen değere güvenilmez.
+- **Belge deposu:** ROADMAP Faz 5'te S3 yazıyor; CLAUDE.md bulut altyapısını
+  kapsam dışı bıraktığı için (SQLite ile aynı gerekçe) yerel dosya sistemi
+  kullanılıyor. Tüm erişim `lib/storage.ts` arkasında — S3'e geçiş yalnızca bu
+  dosyayı değiştirir. Güvenlik: rastgele depo anahtarı (kullanıcı dosya adı yola
+  girmez), içerik imzası (magic bytes) denetimi, dizin geçişine kapalı anahtar
+  kalıbı, oturum zorunlu servis rotası, `nosniff` + kısıtlayıcı CSP.
+  `lib/storage.ts` `server-only` ile işaretlidir; client'a sızarsa build kırılır.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

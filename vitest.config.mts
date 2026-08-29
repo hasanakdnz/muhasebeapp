@@ -1,9 +1,14 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
     // `@/*` alias'ı tsconfig.json'dan okunur.
     tsconfigPaths: true,
+    alias: {
+      // Sunucu-yalnız modüller testte de çalışabilmeli; ayrıntı için stub'a bak.
+      "server-only": path.resolve("tests/helpers/server-only-stub.ts"),
+    },
   },
   test: {
     environment: "node",
