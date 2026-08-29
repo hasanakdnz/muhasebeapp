@@ -34,6 +34,15 @@ enum OdemeStatusu {
   IPTAL
 }
 
+/// Fatura ödemesinin nereden geldiği. Bakiye etkisi buna BAĞLIDIR:
+/// DIREKT ödeme cari bakiyesini düşürür; CEK_TAHSILATI ise düşürmez, çünkü
+/// o para çek tahsilatı kaydedilirken bakiyeden zaten düşülmüştür.
+/// Bu ayrım olmadan çekle ödenen fatura bakiyeyi İKİ KEZ azaltırdı.
+enum OdemeKaynagi {
+  DIREKT
+  CEK_TAHSILATI
+}
+
 enum CekSenetTipi {
   CEK
   SENET
@@ -112,6 +121,7 @@ model Islem {
   // olduğu için sıralama ve raporlama bu alana göre yapılır.
   tarih       DateTime      @default(now())
   vadeTarihi  DateTime?
+  odemeler    IslemOdeme[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -119,6 +129,31 @@ model Islem {
   @@index([status])
   @@index([tarih])
   @@index([vadeTarihi])
+}
+
+/// Fatura bazında ödeme/tahsilat kaydı.
+///
+/// `Islem.odenenTutar` HER ZAMAN Σ IslemOdeme.tutar değerine eşittir ve
+/// `status` bundan türetilir. Bu kayıt olmadan bir faturanın ödenip ödenmediği
+/// bilinemez (cari bakiyesi yalnızca toplamı verir, fatura bazında dağılımı değil)
+/// — yaşlandırma raporu bunu gerektirir.
+model IslemOdeme {
+  id      String       @id @default(cuid())
+  islemId String
+  islem   Islem        @relation(fields: [islemId], references: [id], onDelete: Cascade)
+  tutar   Decimal
+  tarih   DateTime     @default(now())
+  kaynak  OdemeKaynagi @default(DIREKT)
+  /// Kaynak CEK_TAHSILATI ise hangi tahsilattan geldiği. Bir tahsilatın
+  /// faturalara dağıtılan toplamı, tahsilat tutarını aşamaz.
+  cekSenetTahsilatId String?
+  cekSenetTahsilat   CekSenetTahsilat? @relation(fields: [cekSenetTahsilatId], references: [id], onDelete: Restrict)
+  aciklama  String?
+  createdAt DateTime @default(now())
+
+  @@index([islemId])
+  @@index([cekSenetTahsilatId])
+  @@index([tarih])
 }
 
 model IslemKalemi {
@@ -205,6 +240,8 @@ model CekSenetTahsilat {
   tutar      Decimal
   tarih      DateTime @default(now())
   aciklama   String?
+  /// Bu tahsilatın hangi faturalara sayıldığı (kısmen dağıtılabilir).
+  islemOdemeleri IslemOdeme[]
   createdAt  DateTime @default(now())
 
   @@index([cekSenetId])

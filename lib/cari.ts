@@ -10,6 +10,7 @@ import {
   cariEtkisi as tahsilatCariEtkisi,
   ciroEtkileri,
 } from "@/lib/domain/cek-senet";
+import { odemeCariEtkisi } from "@/lib/domain/odeme";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { CariTipiValue } from "@/lib/validations/cari";
 
@@ -81,17 +82,22 @@ function ortakAlanlar(veri: CariYaziVerisi) {
 /**
  * Cari yürüyen bakiyesini oluşturan TÜM etkiler.
  *
- * Üç kaynak vardır ve hepsi sayılmalıdır:
+ * Dört kaynak vardır ve hepsi sayılmalıdır:
  *  1. Satış/alış işlemleri
  *  2. Çek/senet tahsilatları
  *  3. Ciro edilen çekler — ciro İKİ cariyi birden etkiler: çeki veren
  *     müşterinin borcu kapanır, çekin devredildiği tedarikçiye olan borcumuz
  *     azalır. Bu yüzden cari hem "veren" hem "alan" tarafta aranır.
+ *  4. DİREKT fatura ödemeleri (nakit/banka).
+ *
+ * Çek tahsilatından doğan fatura ödemeleri burada SAYILMAZ: o para (2)'de
+ * zaten sayıldı, tekrar sayılırsa çift sayım olur. odemeCariEtkisi bu ayrımı
+ * yapar ve CEK_TAHSILATI için sıfır döner.
  *
  * Biri unutulursa `bakiye = açılış + Σ etki` değişmezi yanlış alarm verir.
  */
 async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
-  const [islemler, tahsilatlar, ciroVerilen, ciroAlinan] = await Promise.all([
+  const [islemler, tahsilatlar, ciroVerilen, ciroAlinan, odemeler] = await Promise.all([
     db.islem.findMany({
       where: { cariId },
       select: { tip: true, toplamTutar: true },
@@ -110,6 +116,10 @@ async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
       where: { ciroEdilenCariId: cariId, durum: "CIRO_EDILDI" },
       select: { tutar: true },
     }),
+    db.islemOdeme.findMany({
+      where: { islem: { cariId } },
+      select: { tutar: true, kaynak: true, islem: { select: { tip: true } } },
+    }),
   ]);
 
   return [
@@ -119,6 +129,9 @@ async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
     ),
     ...ciroVerilen.map((c) => ciroEtkileri(c.tutar.toString()).verenCari),
     ...ciroAlinan.map((c) => ciroEtkileri(c.tutar.toString()).alanCari),
+    ...odemeler.map((o) =>
+      odemeCariEtkisi(o.islem.tip, o.kaynak, o.tutar.toString())
+    ),
   ];
 }
 

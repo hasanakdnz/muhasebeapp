@@ -3,10 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { IslemActions } from "@/components/islem/islem-actions";
+import { OdemePaneli } from "@/components/islem/odeme-panel";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardLabel } from "@/components/ui/card";
+import { Card, CardLabel, CardTitle } from "@/components/ui/card";
 import {
   LedgerBody,
   LedgerCell,
@@ -15,9 +16,11 @@ import {
   LedgerRow,
   LedgerTable,
 } from "@/components/ui/ledger-table";
-import { formatTarih } from "@/lib/date";
+import { formatTarih, toDateInputValue } from "@/lib/date";
+import { ODEME_STATUS_ETIKETI } from "@/lib/domain/odeme";
 import { ISLEM_TIP_ETIKETI } from "@/lib/domain/islem";
 import { getIslem } from "@/lib/islem";
+import { kullanilabilirTahsilatlar, listeleOdemeler } from "@/lib/odeme";
 import { formatTRY } from "@/lib/money";
 
 export const metadata: Metadata = { title: "İşlem · Muhasebe" };
@@ -30,6 +33,20 @@ export default async function IslemDetayPage({
   const { id } = await params;
   const islem = await getIslem(id);
   if (!islem) notFound();
+
+  const [odemeler, tahsilatlar] = await Promise.all([
+    listeleOdemeler(islem.id),
+    kullanilabilirTahsilatlar(islem.cariId),
+  ]);
+
+  const statusVaryanti =
+    islem.status === "ODENDI"
+      ? ("positive" as const)
+      : islem.status === "KISMI_ODENDI"
+        ? ("pending" as const)
+        : islem.status === "IPTAL"
+          ? ("neutral" as const)
+          : ("pending" as const);
 
   return (
     <div className="flex flex-col gap-8">
@@ -77,17 +94,38 @@ export default async function IslemDetayPage({
           </p>
         </Card>
         <Card>
-          <CardLabel>Vade</CardLabel>
-          <p className="mt-2 text-heading-md text-ink">
-            {islem.vadeTarihi ? formatTarih(islem.vadeTarihi) : "—"}
+          <CardLabel>Kalan</CardLabel>
+          <p className="mt-2 text-display-md">
+            <Amount
+              value={islem.kalanTutar}
+              tone={Number(islem.kalanTutar) === 0 ? "neutral" : "negative"}
+            />
           </p>
-          {islem.vadeTarihi && (
-            <Badge variant="pending" className="mt-2">
-              bekliyor
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant={statusVaryanti}>
+              {ODEME_STATUS_ETIKETI[islem.status]}
             </Badge>
-          )}
+            {islem.vadeTarihi && (
+              <span className="text-body-sm text-muted">
+                vade {formatTarih(islem.vadeTarihi)}
+              </span>
+            )}
+          </div>
         </Card>
       </div>
+
+      <Card className="flex flex-col gap-6">
+        <CardTitle>Ödemeler</CardTitle>
+        <OdemePaneli
+          islemId={islem.id}
+          cariId={islem.cariId}
+          kalanTutar={islem.kalanTutar}
+          status={islem.status}
+          odemeler={odemeler}
+          tahsilatlar={tahsilatlar}
+          bugun={toDateInputValue(new Date())}
+        />
+      </Card>
 
       <div className="flex flex-col gap-4">
         <h2 className="text-heading-md text-ink">Kalemler</h2>

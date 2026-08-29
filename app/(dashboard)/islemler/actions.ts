@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-guards";
 import { kdvDahilNete } from "@/lib/domain/islem";
 import { islemOlustur, islemSil } from "@/lib/islem";
+import { odemeEkle, odemeSil } from "@/lib/odeme";
 import { islemSchema, type IslemInput } from "@/lib/validations/islem";
+import { odemeSchema, type OdemeInput } from "@/lib/validations/odeme";
 
 export type ActionResult =
   | { ok: true }
@@ -77,4 +79,77 @@ export async function deleteIslem(
 
   tazele(cariId);
   redirect("/islemler");
+}
+
+/** İş kuralı ihlalleri kullanıcıya okunur mesaj döner; diğerleri fırlatılır. */
+function isKuraliHatasi(error: unknown): ActionResult | null {
+  if (!(error instanceof Error)) return null;
+  const bilinen = [
+    "kalan tutardan büyük",
+    "zaten tamamen ödenmiş",
+    "sıfırdan büyük olmalı",
+    "dağıtılabilecek tutar",
+    "carisine ait değil",
+    "Çek tahsilatı seçin",
+    "ödeme kaydedilemez",
+    "bulunamadı",
+  ];
+  return bilinen.some((k) => error.message.includes(k))
+    ? { ok: false, error: error.message }
+    : null;
+}
+
+export async function createOdeme(
+  islemId: string,
+  cariId: string,
+  veri: OdemeInput
+): Promise<ActionResult> {
+  await requireUser();
+
+  // Client tarafında da doğrulanır; server asla client'a güvenmez (CLAUDE.md).
+  // Tutar burada kullanıcı biçiminden ("3.930,00") kanonik Decimal'e çevrilir —
+  // alan katmanı ham kullanıcı girdisini çözmez.
+  const parsed = odemeSchema.safeParse(veri);
+  if (!parsed.success) {
+    const ilkHata = parsed.error.issues[0]?.message ?? "Girilen bilgilerde hata var.";
+    return { ok: false, error: ilkHata };
+  }
+
+  try {
+    await odemeEkle(islemId, {
+      tutar: parsed.data.tutar,
+      tarih: parsed.data.tarih,
+      kaynak: parsed.data.kaynak,
+      cekSenetTahsilatId: parsed.data.cekSenetTahsilatId,
+      aciklama: parsed.data.aciklama,
+    });
+  } catch (error) {
+    const sonuc = isKuraliHatasi(error);
+    if (sonuc) return sonuc;
+    throw error;
+  }
+
+  tazele(cariId);
+  revalidatePath(`/islemler/${islemId}`);
+  return { ok: true };
+}
+
+export async function deleteOdeme(
+  odemeId: string,
+  islemId: string,
+  cariId: string
+): Promise<ActionResult> {
+  await requireUser();
+
+  try {
+    await odemeSil(odemeId);
+  } catch (error) {
+    const sonuc = isKuraliHatasi(error);
+    if (sonuc) return sonuc;
+    throw error;
+  }
+
+  tazele(cariId);
+  revalidatePath(`/islemler/${islemId}`);
+  return { ok: true };
 }

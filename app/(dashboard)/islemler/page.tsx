@@ -16,6 +16,7 @@ import {
   LedgerTable,
 } from "@/components/ui/ledger-table";
 import { formatTarih } from "@/lib/date";
+import { ODEME_STATUS_ETIKETI } from "@/lib/domain/odeme";
 import {
   ISLEM_TIPLERI,
   ISLEM_TIP_ETIKETI,
@@ -119,9 +120,10 @@ export default async function IslemlerPage({
               <LedgerHeadCell>Tip</LedgerHeadCell>
               <LedgerHeadCell>Cari</LedgerHeadCell>
               <LedgerHeadCell>Vade</LedgerHeadCell>
-              <LedgerHeadCell numeric>Matrah</LedgerHeadCell>
-              <LedgerHeadCell numeric>KDV</LedgerHeadCell>
+              <LedgerHeadCell>Durum</LedgerHeadCell>
               <LedgerHeadCell numeric>Toplam</LedgerHeadCell>
+              <LedgerHeadCell numeric>Ödenen</LedgerHeadCell>
+              <LedgerHeadCell numeric>Kalan</LedgerHeadCell>
             </tr>
           </LedgerHead>
           <LedgerBody>
@@ -144,16 +146,32 @@ export default async function IslemlerPage({
                 <LedgerCell className="whitespace-nowrap text-muted">
                   {islem.vadeTarihi ? formatTarih(islem.vadeTarihi) : "—"}
                 </LedgerCell>
-                <LedgerCell numeric className="text-muted">
-                  <Amount value={islem.matrah} />
-                </LedgerCell>
-                <LedgerCell numeric className="text-muted">
-                  <Amount value={islem.kdvTutari} />
+                <LedgerCell>
+                  <Badge
+                    variant={
+                      islem.status === "ODENDI"
+                        ? "positive"
+                        : islem.status === "IPTAL"
+                          ? "neutral"
+                          : "pending"
+                    }
+                  >
+                    {ODEME_STATUS_ETIKETI[islem.status]}
+                  </Badge>
                 </LedgerCell>
                 <LedgerCell numeric>
                   <Amount
                     value={islem.toplamTutar}
                     tone={islem.tip === "SATIS" ? "positive" : "negative"}
+                  />
+                </LedgerCell>
+                <LedgerCell numeric className="text-muted">
+                  <Amount value={islem.odenenTutar} />
+                </LedgerCell>
+                <LedgerCell numeric>
+                  <Amount
+                    value={islem.kalanTutar}
+                    tone={Number(islem.kalanTutar) === 0 ? "neutral" : "negative"}
                   />
                 </LedgerCell>
               </LedgerRow>

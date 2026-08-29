@@ -87,9 +87,16 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   cariye olan borcumuz aynı tutarda azalır. Bu yüzden hedef cari zorunludur ve
   ciro düz bir durum değişikliği değil, ayrı bir işlemdir (`ciroEt` /
   `ciroGeriAl`). Yalnızca portföydeki, hiç tahsil edilmemiş ALINAN çek ciro edilebilir.
-- **Cari bakiyesinin üç kaynağı vardır:** satış/alış işlemleri ve çek/senet
-  tahsilatları ve ciro edilen çekler (hem veren hem alan tarafta). Mutabakat
-  üçünü birden sayar — yeni bir kaynak eklenirse `cariEtkileri()` güncellenmeli.
+- **Fatura ödemeleri ve ÇİFT SAYIM koruması:** `Islem.odenenTutar` = Σ IslemOdeme
+  ve `status` bundan türetilir. Ödemenin cari bakiyesine etkisi KAYNAĞINA bağlıdır:
+  `DIREKT` (nakit/banka) bakiyeyi düşürür; `CEK_TAHSILATI` kaynaklı ödeme
+  bakiyeyi ETKİLEMEZ — o para çek tahsilatı kaydedilirken zaten düşülmüştür,
+  tekrar düşülseydi çekle ödenen fatura bakiyeyi iki kez azaltırdı. Bir tahsilat
+  birden fazla faturaya bölüştürülebilir; dağıtılan toplam tahsilat tutarını aşamaz.
+- **Cari bakiyesinin dört kaynağı vardır:** satış/alış işlemleri ve çek/senet
+  tahsilatları, ciro edilen çekler (hem veren hem alan tarafta) ve DİREKT fatura
+  ödemeleri. Mutabakat dördünü birden sayar — yeni bir kaynak eklenirse
+  `cariEtkileri()` güncellenmeli.
 - **Gider ve KDV:** `Gider.tutar` KDV DAHİL toplamdır (fişin üzerindeki rakam);
   KDV bu tutarın İÇİNDEN ayrılır (`tutar × oran / (100 + oran)`). Satış tarafında
   KDV matrahın ÜSTÜNE eklenir — ikisi birbirinin tersidir ve testle sabitlenmiştir.
@@ -105,8 +112,8 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   başına kaydedildiği için düz zaman damgası karşılaştırması bugün vadesi gelen
   kaydı saat 00:01'den itibaren "gecikmiş" gösterirdi. Vade rozetleri YALNIZCA
   çek/senette gösterilir: `Islem.odenenTutar`/`status` henüz güncellenmediğinden
-  fatura bazında ödeme durumu bilinmiyor ve faturaya gecikme rozeti koymak
-  parasını almış olduğunuz faturaları da gecikmiş gösterirdi.
+  fatura bazında ödeme durumu bilinmiyordu. Fatura ödeme eşleştirmesi eklendikten
+  sonra bu bilgi mevcut; fatura vade rozetleri Faz 7 raporlarıyla birlikte ele alınacak.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

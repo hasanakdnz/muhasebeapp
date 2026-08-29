@@ -6,6 +6,10 @@ import {
   tersEtki,
   type IslemTipiValue,
 } from "@/lib/domain/islem";
+import {
+  odemeCariEtkisi,
+  type OdemeStatusuValue,
+} from "@/lib/domain/odeme";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 
 export type Db = PrismaClient;
@@ -29,6 +33,10 @@ export type IslemSatiri = {
   kdvTutari: string;
   /** toplamTutar - kdvTutari */
   matrah: string;
+  odenenTutar: string;
+  /** toplamTutar - odenenTutar */
+  kalanTutar: string;
+  status: OdemeStatusuValue;
   kalemSayisi: number;
 };
 
@@ -95,6 +103,7 @@ export async function listeleIslemler(
   return islemler.map((i) => {
     const toplam = roundMoney(i.toplamTutar);
     const kdv = roundMoney(i.kdvTutari);
+    const odenen = roundMoney(i.odenenTutar);
     return {
       id: i.id,
       tip: i.tip,
@@ -105,6 +114,9 @@ export async function listeleIslemler(
       toplamTutar: toplam.toString(),
       kdvTutari: kdv.toString(),
       matrah: toplam.minus(kdv).toString(),
+      odenenTutar: odenen.toString(),
+      kalanTutar: toplam.minus(odenen).toString(),
+      status: i.status,
       kalemSayisi: i._count.kalemler,
     };
   });
@@ -125,6 +137,7 @@ export async function getIslem(
 
   const toplam = roundMoney(islem.toplamTutar);
   const kdv = roundMoney(islem.kdvTutari);
+  const odenen = roundMoney(islem.odenenTutar);
 
   return {
     id: islem.id,
@@ -136,6 +149,9 @@ export async function getIslem(
     toplamTutar: toplam.toString(),
     kdvTutari: kdv.toString(),
     matrah: toplam.minus(kdv).toString(),
+    odenenTutar: odenen.toString(),
+    kalanTutar: toplam.minus(odenen).toString(),
+    status: islem.status,
     kalemSayisi: islem.kalemler.length,
     kalemler: islem.kalemler.map((k) => {
       const girdi = {
@@ -215,7 +231,13 @@ export async function islemSil(id: string, db: Db = prisma): Promise<void> {
   await db.$transaction(async (tx) => {
     const islem = await tx.islem.findUnique({
       where: { id },
-      select: { id: true, tip: true, cariId: true, toplamTutar: true },
+      select: {
+        id: true,
+        tip: true,
+        cariId: true,
+        toplamTutar: true,
+        odemeler: { select: { tutar: true, kaynak: true } },
+      },
     });
     if (!islem) throw new Error("İşlem bulunamadı.");
 
@@ -225,15 +247,23 @@ export async function islemSil(id: string, db: Db = prisma): Promise<void> {
     });
     if (!cari) throw new Error("Cari bulunamadı.");
 
-    const etki = cariBakiyeEtkisi(islem.tip, islem.toplamTutar.toString());
+    let bakiye = roundMoney(cari.bakiye);
+    // İşlemin kendi etkisi geri alınır.
+    bakiye = bakiye.plus(
+      tersEtki(cariBakiyeEtkisi(islem.tip, islem.toplamTutar.toString()))
+    );
+    // Ödemeler cascade ile silinir; DİREKT olanların bakiye etkisi de geri
+    // alınmalı (çek tahsilatından gelenler bakiyeyi hiç etkilemedi).
+    for (const o of islem.odemeler) {
+      const etki = odemeCariEtkisi(islem.tip, o.kaynak, o.tutar.toString());
+      bakiye = bakiye.minus(etki);
+    }
 
-    // Kalemler şemada onDelete: Cascade — işlemle birlikte silinirler.
+    // Kalemler ve ödemeler şemada onDelete: Cascade — işlemle birlikte silinirler.
     await tx.islem.delete({ where: { id } });
     await tx.cari.update({
       where: { id: islem.cariId },
-      data: {
-        bakiye: roundMoney(cari.bakiye).plus(tersEtki(etki)).toString(),
-      },
+      data: { bakiye: bakiye.toString() },
     });
   });
 }
