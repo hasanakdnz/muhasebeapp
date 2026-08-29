@@ -25,7 +25,7 @@ export function CariForm({
   cancelHref,
 }: {
   defaultValues: CariInput;
-  onSubmitAction: (values: CariOutput) => Promise<ActionResult>;
+  onSubmitAction: (values: CariInput) => Promise<ActionResult>;
   submitLabel: string;
   cancelHref: string;
 }) {
@@ -35,6 +35,7 @@ export function CariForm({
   const {
     register,
     handleSubmit,
+    getValues,
     setError,
     formState: { errors },
   } = useForm<CariInput, unknown, CariOutput>({
@@ -43,10 +44,12 @@ export function CariForm({
     defaultValues,
   });
 
-  const onSubmit = handleSubmit((values) => {
+  // Sunucuya kullanıcının YAZDIĞI ham değerler gönderilir; dönüşümü sunucu
+  // kendi şemasıyla yapar, böylece client ve server tam olarak aynı yolu izler.
+  const onSubmit = handleSubmit(() => {
     setServerError(null);
     startTransition(async () => {
-      const result = await onSubmitAction(values);
+      const result = await onSubmitAction(getValues());
       if (result?.ok === false) {
         setServerError(result.error);
         for (const [alan, mesajlar] of Object.entries(result.fieldErrors ?? {})) {

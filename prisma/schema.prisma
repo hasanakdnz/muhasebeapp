@@ -121,10 +121,18 @@ model KasaBanka {
   id         String          @id @default(cuid())
   ad         String
   tip        String // "KASA" | "BANKA"
+  // Yürüyen bakiye. HesapHareketi toplamıyla HER ZAMAN eşit kalmalıdır;
+  // yazma işlemleri transaction içinde bu alanı da günceller ve
+  // hesapBakiyesiniDogrula() ile mutabakatı test edilir.
   bakiye     Decimal         @default(0)
+  // Hareketi olan hesap silinemez (onDelete: Restrict); pasife alınır — Cari ile aynı kural.
+  aktif      Boolean         @default(true)
   hareketler HesapHareketi[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+
+  @@index([tip])
+  @@index([aktif])
 }
 
 model HesapHareketi {

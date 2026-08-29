@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidVknTckn } from "@/lib/identity";
-import { parseAmountInput, roundMoney } from "@/lib/money";
+import { optionalText, tutarAlani } from "@/lib/validations/common";
 
 export const CARI_TIPLERI = ["MUSTERI", "TEDARIKCI", "HER_IKISI"] as const;
 export type CariTipiValue = (typeof CARI_TIPLERI)[number];
@@ -10,38 +10,6 @@ export const CARI_TIP_ETIKETI: Record<CariTipiValue, string> = {
   TEDARIKCI: "Tedarikçi",
   HER_IKISI: "Her ikisi",
 };
-
-/** Boş bırakılan metin alanları undefined'a normalize edilir (DB'de NULL). */
-const optionalText = (max: number, label: string) =>
-  z
-    .string()
-    .trim()
-    .max(max, `${label} en fazla ${max} karakter olabilir.`)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined));
-
-/**
- * Tutar alanı. Girdi kullanıcı biçiminde ("1.234,56"), çıktı Decimal'in
- * kanonik string gösterimi — RSC sınırından geçebilsin diye string tutulur,
- * hesaplama her zaman Decimal ile yapılır.
- */
-const tutarAlani = z
-  .string()
-  .optional()
-  .superRefine((val, ctx) => {
-    const raw = (val ?? "").trim();
-    if (raw === "") return;
-    if (parseAmountInput(raw) === null) {
-      ctx.addIssue({ code: "custom", message: "Geçerli bir tutar girin." });
-    }
-  })
-  .transform((val) => {
-    const raw = (val ?? "").trim();
-    if (raw === "") return "0";
-    const parsed = parseAmountInput(raw);
-    // superRefine geçtiyse parsed null olamaz.
-    return parsed ? roundMoney(parsed).toString() : "0";
-  });
 
 export const cariSchema = z.object({
   unvan: z
@@ -73,7 +41,7 @@ export const cariSchema = z.object({
 
   /** Açılış bakiyesi. Pozitif: alacak (bizden alacaklı değil, bize borçlu),
    *  negatif: borç. Faz 3'te işlemler bakiyeyi güncellemeye başlayacak. */
-  bakiye: tutarAlani,
+  bakiye: tutarAlani({ label: "Açılış bakiyesi" }),
 });
 
 export type CariInput = z.input<typeof cariSchema>;

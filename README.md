@@ -47,5 +47,12 @@ npm run dev
 - **Para birimi:** `lib/money.ts`. Tüm hesap ve biçimlendirme `Decimal` üzerinden
   yapılır, float'a hiç düşülmez — `Intl.NumberFormat` `number` aldığı için
   kullanılmaz. Tutarlar UI'da her zaman `data-numeric` ile gösterilir.
+- **Kasa/Banka bakiyesi:** `KasaBanka.bakiye` yürüyen bakiyedir ve HER ZAMAN
+  `Σ HesapHareketi.tutar` değerine eşit kalır. Hareket ekleme/silme aynı
+  transaction içinde bakiyeyi de günceller; `hesapBakiyesiniDogrula()` mutabakatı
+  kontrol eder ve testlerde bu değişmez doğrulanır. Açılış bakiyesi doğrudan
+  yazılmaz, bir açılış hareketi olarak kaydedilir.
+- **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
+  `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek
   değerdir: `rounded-app` (8px), rozetler `rounded-full`.
