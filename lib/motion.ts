@@ -37,3 +37,17 @@ export function easeOutProgress(t: number): number {
   const clamped = Math.min(Math.max(t, 0), 1);
   return 1 - Math.pow(1 - clamped, 3);
 }
+
+/**
+ * Sayma animasyonunun tek bir karesinde gösterilecek değer.
+ *
+ * KRİTİK: süre dolduğunda hedef Decimal string'i OLDUĞU GİBİ döner. Ara kareler
+ * float'tır (yalnızca çizim için), fakat kullanıcının okuduğu nihai tutar asla
+ * float'tan geçmez — büyük tutarlarda hassasiyet kaybı yaşanmaz.
+ */
+export function sayimKaresi(hedefDeger: string, gecenSure: number): string {
+  if (gecenSure >= DURATION.slow) return hedefDeger;
+  const hedef = Number(hedefDeger);
+  if (!Number.isFinite(hedef)) return hedefDeger;
+  return String(hedef * easeOutProgress(gecenSure / DURATION.slow));
+}

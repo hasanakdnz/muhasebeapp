@@ -28,7 +28,7 @@ export default async function CariDuzenlePage({
     adres: cari.adres ?? "",
     // Kullanıcı tutarı uygulamanın kendi gösterim dilinde görsün ("-15.200,40");
     // parseAmountInput bu biçimi zaten kayıpsız geri okur.
-    bakiye: formatAmount(cari.bakiye),
+    acilisBakiyesi: formatAmount(cari.acilisBakiyesi),
   };
 
   return (

@@ -1,10 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { roundMoney, toDecimal } from "@/lib/money";
 import { aramaNormalize } from "@/lib/text";
+import {
+  cariBakiyeEtkisi,
+  cariBakiyesiMutabik,
+  hesaplaCariBakiyesi,
+} from "@/lib/domain/islem";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { CariTipiValue } from "@/lib/validations/cari";
 
-// Saf hesap mantığı lib/domain/cari.ts içindedir (Prisma'sız, test edilebilir).
+// Saf hesap mantığı lib/domain/ altındadır (Prisma'sız, test edilebilir).
 export { hesaplaCariOzeti } from "@/lib/domain/cari";
 export type { CariOzet } from "@/lib/domain/cari";
 
@@ -29,6 +34,7 @@ export type CariSatiri = {
 export type CariDetay = CariSatiri & {
   vergiDairesi: string | null;
   adres: string | null;
+  acilisBakiyesi: string;
   createdAt: Date;
   islemSayisi: number;
   cekSenetSayisi: number;
@@ -43,18 +49,8 @@ export type CariFiltre = {
   pasifleriGoster?: boolean;
 };
 
-function aramaKosulu(q: string) {
-  // Ünvan araması normalize edilmiş anahtar üzerinden yapılır (bkz. lib/text.ts):
-  // "ışık", "IŞIK" ve "isik" aynı kaydı bulur. VKN/TCKN salt rakam olduğu için
-  // doğrudan aranır.
-  return [
-    { aramaAnahtari: { contains: aramaNormalize(q) } },
-    { vknTckn: { contains: q.trim() } },
-  ];
-}
-
-/** Yazma işlemlerinde Cari alanlarını tek yerden üretir — create/update ayrışmasın. */
-export function cariVerisiHazirla(veri: {
+/** Yazma işlemlerinde ortak alanlar — create/update ayrışmasın. */
+export type CariYaziVerisi = {
   unvan: string;
   tip: CariTipiValue;
   vknTckn?: string;
@@ -62,8 +58,10 @@ export function cariVerisiHazirla(veri: {
   telefon?: string;
   email?: string;
   adres?: string;
-  bakiye: string;
-}) {
+  acilisBakiyesi: string;
+};
+
+function ortakAlanlar(veri: CariYaziVerisi) {
   return {
     unvan: veri.unvan,
     tip: veri.tip,
@@ -72,9 +70,18 @@ export function cariVerisiHazirla(veri: {
     telefon: veri.telefon ?? null,
     email: veri.email ?? null,
     adres: veri.adres ?? null,
-    bakiye: veri.bakiye,
     aramaAnahtari: aramaNormalize(veri.unvan),
   };
+}
+
+function aramaKosulu(q: string) {
+  // Ünvan araması normalize edilmiş anahtar üzerinden yapılır (bkz. lib/text.ts):
+  // "ışık", "IŞIK" ve "isik" aynı kaydı bulur. VKN/TCKN salt rakam olduğu için
+  // doğrudan aranır.
+  return [
+    { aramaAnahtari: { contains: aramaNormalize(q) } },
+    { vknTckn: { contains: q.trim() } },
+  ];
 }
 
 export async function listeleCariler(
@@ -135,12 +142,61 @@ export async function getCari(
     email: cari.email,
     vergiDairesi: cari.vergiDairesi,
     adres: cari.adres,
+    acilisBakiyesi: roundMoney(cari.acilisBakiyesi).toString(),
     bakiye: roundMoney(cari.bakiye).toString(),
     aktif: cari.aktif,
     createdAt: cari.createdAt,
     islemSayisi: cari._count.islemler,
     cekSenetSayisi: cari._count.cekSenetler,
   };
+}
+
+/** Yeni caride henüz işlem yoktur; yürüyen bakiye açılış bakiyesine eşittir. */
+export async function cariOlustur(
+  veri: CariYaziVerisi,
+  db: Db = prisma
+): Promise<{ id: string }> {
+  const acilis = roundMoney(veri.acilisBakiyesi).toString();
+  return db.cari.create({
+    data: {
+      ...ortakAlanlar(veri),
+      acilisBakiyesi: acilis,
+      bakiye: acilis,
+    },
+    select: { id: true },
+  });
+}
+
+/**
+ * Cariyi günceller. Açılış bakiyesi değişirse yürüyen bakiye YENİDEN hesaplanır
+ * (açılış + Σ işlem etkileri) — `bakiye` hiçbir zaman doğrudan yazılmaz,
+ * aksi halde değişmez bozulurdu.
+ */
+export async function cariGuncelle(
+  id: string,
+  veri: CariYaziVerisi,
+  db: Db = prisma
+): Promise<void> {
+  const acilis = roundMoney(veri.acilisBakiyesi).toString();
+
+  await db.$transaction(async (tx) => {
+    const islemler = await tx.islem.findMany({
+      where: { cariId: id },
+      select: { tip: true, toplamTutar: true },
+    });
+    const etkiler = islemler.map((i) =>
+      cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())
+    );
+
+    await tx.cari.update({
+      where: { id },
+      data: {
+        ...ortakAlanlar(veri),
+        acilisBakiyesi: acilis,
+        bakiye: hesaplaCariBakiyesi(acilis, etkiler),
+      },
+    });
+  });
 }
 
 /**
@@ -164,5 +220,38 @@ export async function cariSilinebilirMi(
     silinebilir: islemSayisi === 0 && cekSenetSayisi === 0,
     islemSayisi,
     cekSenetSayisi,
+  };
+}
+
+/**
+ * Mutabakat: saklanan yürüyen bakiye, açılış + işlem etkileriyle tutuyor mu?
+ * Kasa/Banka'daki hesapBakiyesiniDogrula ile aynı disiplin.
+ */
+export async function cariBakiyesiniDogrula(
+  id: string,
+  db: Db = prisma
+): Promise<{ mutabik: boolean; saklanan: string; hesaplanan: string }> {
+  const cari = await db.cari.findUnique({
+    where: { id },
+    select: { acilisBakiyesi: true, bakiye: true },
+  });
+  if (!cari) throw new Error("Cari bulunamadı.");
+
+  const islemler = await db.islem.findMany({
+    where: { cariId: id },
+    select: { tip: true, toplamTutar: true },
+  });
+  const etkiler = islemler.map((i) =>
+    cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())
+  );
+
+  return {
+    mutabik: cariBakiyesiMutabik(
+      cari.bakiye.toString(),
+      cari.acilisBakiyesi.toString(),
+      etkiler
+    ),
+    saklanan: roundMoney(cari.bakiye).toString(),
+    hesaplanan: hesaplaCariBakiyesi(cari.acilisBakiyesi.toString(), etkiler),
   };
 }

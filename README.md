@@ -52,6 +52,15 @@ npm run dev
   transaction içinde bakiyeyi de günceller; `hesapBakiyesiniDogrula()` mutabakatı
   kontrol eder ve testlerde bu değişmez doğrulanır. Açılış bakiyesi doğrudan
   yazılmaz, bir açılış hareketi olarak kaydedilir.
+- **KDV:** `IslemKalemi.birimFiyat` DAİMA KDV hariç (net) saklanır — şemada
+  dahil/hariç bayrağı yok, saklamanın tek anlamı olmalı. Arayüzdeki "KDV dahil
+  giriyorum" seçeneği fiyatı kaydetmeden önce net'e çevirir. KDV, e-Fatura
+  pratiğindeki gibi SATIR bazında kuruşa yuvarlanır; genel toplam bu yuvarlanmış
+  satırlardan üretilir, böylece toplam ekranda görünen satırlarla uyuşur.
+- **Cari bakiyesi:** `Cari.bakiye` yürüyen bakiyedir ve HER ZAMAN
+  `acilisBakiyesi + Σ(işlem etkisi)` değerine eşittir. Elle düzenlenmez; açılış
+  bakiyesi değişirse yeniden hesaplanır. `cariBakiyesiniDogrula()` mutabakatı ölçer.
+  Satış bakiyeyi artırır (cari size borçlanır), alış azaltır.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

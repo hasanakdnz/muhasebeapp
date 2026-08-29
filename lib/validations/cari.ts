@@ -39,9 +39,14 @@ export const cariSchema = z.object({
 
   adres: optionalText(500, "Adres"),
 
-  /** Açılış bakiyesi. Pozitif: alacak (bizden alacaklı değil, bize borçlu),
-   *  negatif: borç. Faz 3'te işlemler bakiyeyi güncellemeye başlayacak. */
-  bakiye: tutarAlani({ label: "Açılış bakiyesi" }),
+  /**
+   * Cari kartı açılırken devreden bakiye. Pozitif: cari bize borçlu (alacak),
+   * negatif: biz cariye borçluyuz.
+   *
+   * Yürüyen `bakiye` alanı elle girilmez — açılış + işlem etkilerinden doğar
+   * (bkz. lib/cari.ts cariGuncelle / cariBakiyesiniDogrula).
+   */
+  acilisBakiyesi: tutarAlani({ label: "Açılış bakiyesi" }),
 });
 
 export type CariInput = z.input<typeof cariSchema>;
@@ -55,5 +60,5 @@ export const cariFormDefaults: CariInput = {
   telefon: "",
   email: "",
   adres: "",
-  bakiye: "",
+  acilisBakiyesi: "",
 };

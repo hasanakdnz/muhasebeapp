@@ -132,17 +132,17 @@ export function CariForm({
         </Field>
 
         <Field
-          id="bakiye"
+          id="acilisBakiyesi"
           label="Açılış bakiyesi"
-          error={errors.bakiye?.message}
+          error={errors.acilisBakiyesi?.message}
           hint="Pozitif: cari size borçlu (alacak). Negatif: siz cariye borçlusunuz."
         >
           <Input
-            id="bakiye"
+            id="acilisBakiyesi"
             inputMode="decimal"
             placeholder="0,00"
-            aria-invalid={Boolean(errors.bakiye)}
-            {...register("bakiye")}
+            aria-invalid={Boolean(errors.acilisBakiyesi)}
+            {...register("acilisBakiyesi")}
           />
         </Field>
 

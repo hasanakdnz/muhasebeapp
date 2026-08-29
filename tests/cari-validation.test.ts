@@ -9,14 +9,14 @@ const gecerli = {
   telefon: "0216 555 44 33",
   email: "info@yilmaz.com.tr",
   adres: "Caferağa Mah. No:1",
-  bakiye: "1.500,50",
+  acilisBakiyesi: "1.500,50",
 };
 
 describe("cariSchema", () => {
   it("geçerli kaydı kabul eder ve tutarı normalize eder", () => {
     const r = cariSchema.safeParse(gecerli);
     expect(r.success).toBe(true);
-    expect(r.data?.bakiye).toBe("1500.5");
+    expect(r.data?.acilisBakiyesi).toBe("1500.5");
     expect(r.data?.unvan).toBe("Yılmaz Ticaret Ltd. Şti.");
   });
 
@@ -36,19 +36,19 @@ describe("cariSchema", () => {
   });
 
   it("bakiye boşsa sıfır kabul eder", () => {
-    const r = cariSchema.safeParse({ ...gecerli, bakiye: "" });
+    const r = cariSchema.safeParse({ ...gecerli, acilisBakiyesi: "" });
     expect(r.success).toBe(true);
-    expect(r.data?.bakiye).toBe("0");
+    expect(r.data?.acilisBakiyesi).toBe("0");
   });
 
   it("negatif açılış bakiyesini korur (borç)", () => {
-    const r = cariSchema.safeParse({ ...gecerli, bakiye: "-2.000,25" });
-    expect(r.data?.bakiye).toBe("-2000.25");
+    const r = cariSchema.safeParse({ ...gecerli, acilisBakiyesi: "-2.000,25" });
+    expect(r.data?.acilisBakiyesi).toBe("-2000.25");
   });
 
   it("kuruş altını yuvarlar", () => {
-    const r = cariSchema.safeParse({ ...gecerli, bakiye: "10,005" });
-    expect(r.data?.bakiye).toBe("10.01");
+    const r = cariSchema.safeParse({ ...gecerli, acilisBakiyesi: "10,005" });
+    expect(r.data?.acilisBakiyesi).toBe("10.01");
   });
 
   it("kısa ünvanı reddeder", () => {
@@ -69,7 +69,7 @@ describe("cariSchema", () => {
 
   it("geçersiz e-postayı ve tutarı reddeder", () => {
     expect(cariSchema.safeParse({ ...gecerli, email: "abc" }).success).toBe(false);
-    expect(cariSchema.safeParse({ ...gecerli, bakiye: "abc" }).success).toBe(false);
+    expect(cariSchema.safeParse({ ...gecerli, acilisBakiyesi: "abc" }).success).toBe(false);
   });
 
   it("geçersiz cari tipini reddeder", () => {

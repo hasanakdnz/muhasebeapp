@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./helpers/test-db";
 import {
+  cariBakiyesiniDogrula,
+  cariGuncelle,
+  cariOlustur,
   cariSilinebilirMi,
-  cariVerisiHazirla,
   getCari,
   listeleCariler,
 } from "@/lib/cari";
@@ -21,7 +23,7 @@ afterAll(async () => {
 /** Server action'ın yaptığı doğrulama + kayıt adımının aynısı. */
 async function cariEkle(girdi: Record<string, unknown>) {
   const parsed = cariSchema.parse(girdi);
-  return db.prisma.cari.create({ data: cariVerisiHazirla(parsed) });
+  return cariOlustur(parsed, db.prisma);
 }
 
 describe("Cari — ekle", () => {
@@ -32,14 +34,17 @@ describe("Cari — ekle", () => {
       vknTckn: "1234567890",
       telefon: "0216 555 44 33",
       email: "info@yilmaz.com.tr",
-      bakiye: "1.500,50",
+      acilisBakiyesi: "1.500,50",
     });
 
     const kayit = await getCari(cari.id, db.prisma);
     expect(kayit?.unvan).toBe("Yılmaz Ticaret Ltd. Şti.");
+    expect(kayit?.acilisBakiyesi).toBe("1500.5");
+    // İşlemi olmayan caride yürüyen bakiye açılışa eşittir.
     expect(kayit?.bakiye).toBe("1500.5");
     expect(kayit?.aktif).toBe(true);
     expect(kayit?.islemSayisi).toBe(0);
+    expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 
   it("boş bırakılan alanları NULL olarak saklar", async () => {
@@ -49,7 +54,7 @@ describe("Cari — ekle", () => {
       vknTckn: "",
       telefon: "",
       email: "",
-      bakiye: "",
+      acilisBakiyesi: "",
     });
 
     const kayit = await getCari(cari.id, db.prisma);
@@ -62,7 +67,7 @@ describe("Cari — ekle", () => {
     const cari = await cariEkle({
       unvan: "Büyük Bakiye A.Ş.",
       tip: "MUSTERI",
-      bakiye: "1.234.567.890.123,45", // ~1,2 trilyon TL
+      acilisBakiyesi: "1.234.567.890.123,45", // ~1,2 trilyon TL
     });
     const kayit = await getCari(cari.id, db.prisma);
     expect(kayit?.bakiye).toBe("1234567890123.45");
@@ -77,7 +82,7 @@ describe("Cari — ekle", () => {
     const cari = await cariEkle({
       unvan: "Sınır Testi",
       tip: "MUSTERI",
-      bakiye: "9007199254740993,45", // 18 anlamlı basamak — gerçekçi değil
+      acilisBakiyesi: "9007199254740993,45", // 18 anlamlı basamak — gerçekçi değil
     });
     const kayit = await getCari(cari.id, db.prisma);
     expect(kayit?.bakiye).not.toBe("9007199254740993.45");
@@ -89,19 +94,16 @@ describe("Cari — düzenle", () => {
     const cari = await cariEkle({
       unvan: "Eski Ünvan",
       tip: "MUSTERI",
-      bakiye: "100",
+      acilisBakiyesi: "100",
     });
 
     const parsed = cariSchema.parse({
       unvan: "Yeni Ünvan A.Ş.",
       tip: "HER_IKISI",
       vknTckn: "10000000146",
-      bakiye: "-2.500,75",
+      acilisBakiyesi: "-2.500,75",
     });
-    await db.prisma.cari.update({
-      where: { id: cari.id },
-      data: cariVerisiHazirla(parsed),
-    });
+    await cariGuncelle(cari.id, parsed, db.prisma);
 
     const kayit = await getCari(cari.id, db.prisma);
     expect(kayit?.unvan).toBe("Yeni Ünvan A.Ş.");
@@ -114,7 +116,7 @@ describe("Cari — düzenle", () => {
     const cari = await cariEkle({
       unvan: "Pasif Olacak Cari",
       tip: "MUSTERI",
-      bakiye: "0",
+      acilisBakiyesi: "0",
     });
 
     await db.prisma.cari.update({
@@ -135,7 +137,7 @@ describe("Cari — sil", () => {
     const cari = await cariEkle({
       unvan: "Silinecek Cari",
       tip: "MUSTERI",
-      bakiye: "0",
+      acilisBakiyesi: "0",
     });
 
     const durum = await cariSilinebilirMi(cari.id, db.prisma);
@@ -149,7 +151,7 @@ describe("Cari — sil", () => {
     const cari = await cariEkle({
       unvan: "İşlemli Cari",
       tip: "MUSTERI",
-      bakiye: "500",
+      acilisBakiyesi: "500",
     });
 
     await db.prisma.islem.create({
@@ -174,7 +176,7 @@ describe("Cari — sil", () => {
     const cari = await cariEkle({
       unvan: "Çekli Cari",
       tip: "MUSTERI",
-      bakiye: "0",
+      acilisBakiyesi: "0",
     });
 
     await db.prisma.cekSenet.create({
@@ -194,8 +196,8 @@ describe("Cari — sil", () => {
 
 describe("Cari — listeleme ve filtreler", () => {
   it("açık hesap filtresi sıfır bakiyelileri eler", async () => {
-    await cariEkle({ unvan: "Sıfır Bakiye", tip: "MUSTERI", bakiye: "0" });
-    await cariEkle({ unvan: "Açık Bakiye", tip: "MUSTERI", bakiye: "250,25" });
+    await cariEkle({ unvan: "Sıfır Bakiye", tip: "MUSTERI", acilisBakiyesi: "0" });
+    await cariEkle({ unvan: "Açık Bakiye", tip: "MUSTERI", acilisBakiyesi: "250,25" });
 
     const acik = await listeleCariler({ sadeceAcikHesap: true }, db.prisma);
     expect(acik.some((c) => c.unvan === "Sıfır Bakiye")).toBe(false);
@@ -203,7 +205,7 @@ describe("Cari — listeleme ve filtreler", () => {
   });
 
   it("ünvana göre arar (Türkçe büyük/küçük harf dahil)", async () => {
-    await cariEkle({ unvan: "Işık Mühendislik", tip: "TEDARIKCI", bakiye: "0" });
+    await cariEkle({ unvan: "Işık Mühendislik", tip: "TEDARIKCI", acilisBakiyesi: "0" });
 
     const küçük = await listeleCariler({ q: "ışık" }, db.prisma);
     expect(küçük.some((c) => c.unvan === "Işık Mühendislik")).toBe(true);
@@ -221,7 +223,7 @@ describe("Cari — listeleme ve filtreler", () => {
       unvan: "Vergi Numaralı Cari",
       tip: "MUSTERI",
       vknTckn: "9876543210",
-      bakiye: "0",
+      acilisBakiyesi: "0",
     });
     const sonuc = await listeleCariler({ q: "9876543210" }, db.prisma);
     expect(sonuc.some((c) => c.unvan === "Vergi Numaralı Cari")).toBe(true);

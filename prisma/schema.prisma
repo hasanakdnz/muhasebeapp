@@ -70,7 +70,12 @@ model Cari {
   // Türkçe arama anahtarı: tr-locale küçük harf + şapka/nokta katlaması.
   // SQLite LIKE yalnızca ASCII'de büyük/küçük ayrımı yapmadığı için gerekli.
   aramaAnahtari String    @default("")
-  bakiye       Decimal    @default(0) // pozitif: alacak, negatif: borç
+  // Cari kartı açılırken devreden bakiye. Yürüyen bakiyenin çıkış noktasıdır.
+  acilisBakiyesi Decimal  @default(0)
+  // Yürüyen bakiye — pozitif: alacak, negatif: borç.
+  // HER ZAMAN acilisBakiyesi + Σ(işlem etkisi) değerine eşittir; elle
+  // düzenlenmez, cariBakiyesiniDogrula() ile mutabakatı ölçülür.
+  bakiye       Decimal    @default(0)
   // İşlem/çek kaydı olan cari silinemez (onDelete: Restrict); bunun yerine
   // pasife alınır. Muhasebe kaydı sessizce yok edilmemeli.
   aktif        Boolean    @default(true)
@@ -96,12 +101,16 @@ model Islem {
   kdvTutari   Decimal
   status      OdemeStatusu  @default(BEKLIYOR)
   odenenTutar Decimal       @default(0)
+  // Belge tarihi. createdAt kayıt anıdır; geriye dönük fatura girmek yaygın
+  // olduğu için sıralama ve raporlama bu alana göre yapılır.
+  tarih       DateTime      @default(now())
   vadeTarihi  DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   @@index([cariId])
   @@index([status])
+  @@index([tarih])
   @@index([vadeTarihi])
 }
 

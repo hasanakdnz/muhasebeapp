@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-guards";
-import { cariSilinebilirMi, cariVerisiHazirla } from "@/lib/cari";
+import { cariGuncelle, cariOlustur, cariSilinebilirMi } from "@/lib/cari";
 import { prisma } from "@/lib/prisma";
 import { cariSchema, type CariInput } from "@/lib/validations/cari";
 
@@ -24,10 +24,7 @@ export async function createCari(values: CariInput): Promise<ActionResult> {
     };
   }
 
-  const cari = await prisma.cari.create({
-    data: cariVerisiHazirla(parsed.data),
-    select: { id: true },
-  });
+  const cari = await cariOlustur(parsed.data);
 
   revalidatePath("/cariler");
   // `yeni` parametresi listede yeni satırın kısa vurgusu için kullanılır (DESIGN.md).
@@ -55,10 +52,7 @@ export async function updateCari(
   });
   if (!mevcut) return { ok: false, error: "Cari bulunamadı." };
 
-  await prisma.cari.update({
-    where: { id },
-    data: cariVerisiHazirla(parsed.data),
-  });
+  await cariGuncelle(id, parsed.data);
 
   revalidatePath("/cariler");
   revalidatePath(`/cariler/${id}`);
