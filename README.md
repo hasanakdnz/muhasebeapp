@@ -50,6 +50,70 @@ Dönem URL'de taşınır — rapor paylaşılabilir ve yer imine eklenebilir.
   60. gün 31-60 kovasındadır. Vadesi gelmemiş tutar ayrı gösterilir, yaşlandırılmaz.
   Yaşlandırma tabanı vade tarihidir; vade girilmemişse belge tarihi kullanılır.
 
+## Teklif (proforma)
+
+Teklif satış ÖNCESİ bir belgedir, muhasebe kaydı değildir: kaydedilmesi cari
+bakiyesini, KDV raporunu ve vade takibini **etkilemez**. İşlem olarak
+saklansaydı gerçekleşmemiş bir satış deftere yazılır, müşterinin borcu haksız
+yere artar ve beyan edilmemiş KDV rapora girerdi.
+
+```
+TASLAK ──► GONDERILDI ──► KABUL ──► ISLEME_DONUSTU  (kilitli)
+   │            └──────► RED
+   └──────────────────► RED
+```
+
+- Muhasebe **yalnızca** "Faturaya dönüştür" adımında başlar: teklif kalemleri
+  bir SATIŞ işlemine yazılır ve cari bakiyesi o anda değişir. Fatura oluşturma
+  ile teklifin kilitlenmesi TEK transaction'dadır — aksi halde ya bakiyesi
+  artmış sahipsiz bir fatura ya da iki kez faturalanabilen bir teklif kalırdı.
+- `ISLEME_DONUSTU` uç durumdur: teklif artık düzenlenemez ve silinemez.
+- Numara yıl bazlıdır (`PRF-2026-0001`). Sıra, kayıt sayısından değil mevcut
+  numaraların EN BÜYÜĞÜNDEN üretilir; aradan bir teklif silinince daha önce
+  kullanılmış bir numara tekrar verilmez.
+- KDV hesabı faturayla aynı fonksiyonları kullanır (`hesaplaIslemToplamlari`,
+  `kdvDahilNete`), böylece teklifte görünen tutar ile faturaya dönüşünce oluşan
+  tutar ayrışamaz.
+
+**Çıktı ve paylaşım.** Belge `/(dashboard)/proformalar/[id]/yazdir` altında
+HTML olarak üretilir, PDF tarayıcının "PDF olarak kaydet" çıktısıyla alınır —
+raporlarla aynı gerekçe (aşağıya bakınız). WhatsApp ve e-posta bağlantıları
+teklifi özetleyen hazır bir mesaj açar, PDF'i kullanıcı o mesaja ekler:
+uygulama dışarıya dosya sunmadığı için hiçbir finansal evrak izinsiz bir dış
+servise yüklenmez. Telefon numarası uluslararası biçime çevrilir; tanınmazsa
+alıcısız bağlantı üretilir — yanlış kişiye teklif göndermektense alıcıyı
+kullanıcının seçmesi daha güvenlidir.
+
+Firma künyesi (ünvan, VKN, adres, IBAN, logo) **Ayarlar** ekranından girilir ve
+teklif çıktısının başlığını oluşturur.
+
+## İşlem kaydı (audit log)
+
+Yöneticiye özel `/kayitlar` ekranı, geri alınamaz ve parasal sonucu olan
+işlemleri gösterir: silmeler, ödeme/tahsilat, ciro ve durum değişiklikleri.
+Sıradan okuma kaydedilmez — her şeyi kaydeden bir log okunmaz olur.
+
+Kayıt, asıl işlem başarılı olduktan sonra action katmanından yazılır; asıl
+işlemle aynı transaction'da **değildir** (veri katmanı fonksiyonları kendi
+transaction'larını yönetiyor). Pratik sonucu: log yazımı başarısız olursa
+kullanıcının işlemi geri alınmaz, hata sunucuya yazılır. Atomik denetim kaydı
+gerekirse transaction'ın aşağıya taşınması gerekir.
+
+## Roller (RBAC)
+
+| | Personel | Yönetici |
+|---|---|---|
+| Kayıt girme, düzenleme, ödeme/tahsilat | ✓ | ✓ |
+| **Silme** (cari, işlem, ödeme, çek/senet, tahsilat, hareket, gider, teklif) | — | ✓ |
+| Ayarlar (firma künyesi) | — | ✓ |
+| İşlem kaydı | — | ✓ |
+
+Silme yönetici işidir: personel kayıt girer, hatayı yönetici temizler. Yetki iki
+katmanda uygulanır — düğme personelde hiç render edilmez (`isAdmin()`), server
+action ayrıca `adminVeyaHata()` ile doğrular. Guard hata FIRLATMAZ, action
+sözleşmesine uyan bir sonuç döner; aksi halde personel silme düğmesine basınca
+çökme ekranı görürdü.
+
 ## Vade bildirimi (cron)
 
 Vadesi geçen/yaklaşan çek-senetleri yöneticilere bildiren job dış bir
@@ -130,6 +194,15 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   çek/senette gösterilir: `Islem.odenenTutar`/`status` henüz güncellenmediğinden
   fatura bazında ödeme durumu bilinmiyordu. Fatura ödeme eşleştirmesi eklendikten
   sonra bu bilgi mevcut; fatura vade rozetleri Faz 7 raporlarıyla birlikte ele alınacak.
+- **Fatura yazımı tek yerde:** `islemYaz(tx, veri)` transaction İÇİ gövdedir;
+  `islemOlustur` onu kendi transaction'ında sarar, proforma dönüşümü ise kendi
+  transaction'ında çağırır. Prisma'da transaction iç içe açılamadığı için
+  ayrıldı — iki çağıran da aynı KDV ve bakiye kurallarını kullanır.
+- **Denetim detayı:** `AuditLog.detay` bir `Json` alanıdır; nesne DOĞRUDAN
+  yazılır. `JSON.stringify` ile verilseydi Prisma bir kez daha kodlar ve
+  veritabanında çift kodlanmış bir dize kalırdı. Ekranda ham enum gösterilmez
+  (`KABUL` değil "Kabul edildi"); karşılığı bilinmeyen değer olduğu gibi
+  gösterilir, kayıt hiçbir zaman gizlenmez.
 - **Silme kuralı:** Muhasebe kaydı olan cari/hesap silinemez (şemada
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek

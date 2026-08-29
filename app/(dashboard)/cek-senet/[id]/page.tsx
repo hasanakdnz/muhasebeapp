@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
+import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { CekSenetActions } from "@/components/cek-senet/cek-senet-actions";
 import { DurumBadge } from "@/components/cek-senet/durum-badge";
@@ -27,6 +28,8 @@ export default async function CekSenetDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
+  const yonetici = await isAdmin();
   const [kayit, cariler] = await Promise.all([getCekSenet(id), listeleCariler()]);
   if (!kayit) notFound();
 
@@ -53,6 +56,7 @@ export default async function CekSenetDetayPage({
               </Link>
             </div>
             <CekSenetActions
+              yonetici={yonetici}
               id={kayit.id}
               cariId={kayit.cariId}
               durum={kayit.durum}
@@ -115,6 +119,7 @@ export default async function CekSenetDetayPage({
       <Card className="flex flex-col gap-6">
         <CardTitle>Tahsilatlar</CardTitle>
         <TahsilatPaneli
+              yonetici={yonetici}
           cekSenet={kayit}
           bugun={toDateInputValue(new Date())}
         />

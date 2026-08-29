@@ -54,7 +54,10 @@ export function Sidebar({ role }: { role: Role }) {
   }, [indicator, settled]);
 
   return (
-    <aside className="w-sidebar shrink-0 border-r border-border bg-paper">
+    // sticky + self-start: flex kabında `align-items: stretch` yüksekliği
+    // içeriğe eşitler ve sticky'nin kayacağı alan kalmazdı. Uzun ekstre/tablo
+    // sayfalarında gezinme görünürden çıkmamalı.
+    <aside className="sticky top-0 h-screen w-sidebar shrink-0 self-start overflow-y-auto border-r border-border bg-paper">
       <div className="sticky top-0 flex h-screen flex-col">
         <div className="px-6 py-8">
           <span className="text-heading-md text-ink">Muhasebe</span>

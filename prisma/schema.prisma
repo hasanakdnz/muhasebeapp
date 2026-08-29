@@ -38,6 +38,14 @@ enum OdemeStatusu {
 /// DIREKT ödeme cari bakiyesini düşürür; CEK_TAHSILATI ise düşürmez, çünkü
 /// o para çek tahsilatı kaydedilirken bakiyeden zaten düşülmüştür.
 /// Bu ayrım olmadan çekle ödenen fatura bakiyeyi İKİ KEZ azaltırdı.
+enum ProformaDurumu {
+  TASLAK
+  GONDERILDI
+  KABUL
+  RED
+  ISLEME_DONUSTU
+}
+
 enum OdemeKaynagi {
   DIREKT
   CEK_TAHSILATI
@@ -94,6 +102,7 @@ model Cari {
   // pasife alınır. Muhasebe kaydı sessizce yok edilmemeli.
   aktif        Boolean    @default(true)
   islemler     Islem[]
+  proformalar  Proforma[]
   cekSenetler  CekSenet[] @relation("CekSenetCari")
   // Bize verilmiş bir çekin ciro edildiği cari (tedarikçi) tarafı.
   ciroEdilenCekler CekSenet[] @relation("CiroEdilenCari")
@@ -286,4 +295,63 @@ model AuditLog {
   @@index([userId])
   @@index([hedefTip, hedefId])
   @@index([createdAt])
+}
+
+/// Firma bilgileri — tek satırlık ayar kaydı.
+/// Proforma başlığında (logo/kaşe alanı) ve paylaşım metinlerinde kullanılır.
+model Firma {
+  id           String  @id @default("firma")
+  unvan        String  @default("")
+  vknTckn      String?
+  vergiDairesi String?
+  adres        String?
+  telefon      String?
+  email        String?
+  iban         String?
+  /// Yüklenen logonun depo anahtarı (bkz. lib/storage.ts).
+  logoUrl      String?
+  logoAdi      String?
+  updatedAt    DateTime @updatedAt
+}
+
+/// Proforma (teklif).
+///
+/// İşlemden AYRI bir modeldir ve hiçbir bakiyeyi etkilemez: proforma satış
+/// öncesi bir tekliftir, gerçekleşmemiş bir satışı İşlem olarak kaydetmek
+/// müşterinin borcunu haksız yere artırırdı. Teklif kabul edilince
+/// `isleme dönüştür` ile gerçek İşlem oluşturulur.
+model Proforma {
+  id            String          @id @default(cuid())
+  /// Kullanıcıya gösterilen sıra numarası (PRF-2026-0001).
+  no            String          @unique
+  cariId        String
+  cari          Cari            @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  tarih         DateTime        @default(now())
+  gecerlilikTarihi DateTime?
+  durum         ProformaDurumu  @default(TASLAK)
+  notlar        String?
+  toplamTutar   Decimal         @default(0)
+  kdvTutari     Decimal         @default(0)
+  kalemler      ProformaKalemi[]
+  /// Kabul edilip İşleme dönüştürüldüyse oluşan işlem.
+  islemId       String?         @unique
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([cariId])
+  @@index([durum])
+  @@index([tarih])
+}
+
+model ProformaKalemi {
+  id         String   @id @default(cuid())
+  proformaId String
+  proforma   Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  urunAdi    String
+  miktar     Decimal
+  /// KDV hariç net birim fiyat — İslemKalemi ile aynı anlamda.
+  birimFiyat Decimal
+  kdvOrani   Decimal
+
+  @@index([proformaId])
 }

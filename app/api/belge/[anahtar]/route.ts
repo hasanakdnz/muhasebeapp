@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { belgeAnahtariKullanimda } from "@/lib/gider";
+import { logoAnahtariKullanimda } from "@/lib/firma";
 import { anahtarGecerliMi, anahtarMimeTipi, belgeOku } from "@/lib/storage";
 
 /**
@@ -29,7 +30,12 @@ export async function GET(
     return new NextResponse("Geçersiz belge.", { status: 400 });
   }
 
-  if (!(await belgeAnahtariKullanimda(anahtar))) {
+  // Anahtar ya bir gider belgesine ya da firma logosuna ait olmalı.
+  const [giderBelgesi, firmaLogosu] = await Promise.all([
+    belgeAnahtariKullanimda(anahtar),
+    logoAnahtariKullanimda(anahtar),
+  ]);
+  if (!giderBelgesi && !firmaLogosu) {
     return new NextResponse("Belge bulunamadı.", { status: 404 });
   }
 

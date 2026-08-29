@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth-guards";
+import { adminVeyaHata, requireUser } from "@/lib/auth-guards";
+import { auditKaydet } from "@/lib/audit";
 import {
   hareketEkle,
   hareketSil,
@@ -66,7 +67,9 @@ export async function updateHesap(
 
 /** Hareketi olan hesap silinemez; doğru aksiyon pasife almaktır. */
 export async function deleteHesap(id: string): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
 
   const durum = await hesapSilinebilirMi(id);
   if (!durum.silinebilir) {
@@ -77,6 +80,13 @@ export async function deleteHesap(id: string): Promise<ActionResult> {
   }
 
   await hesapSil(id);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "KasaBanka",
+    hedefId: id,
+  });
+
   revalidatePath("/kasa-banka");
   redirect("/kasa-banka");
 }
@@ -96,12 +106,23 @@ export async function createHareket(
   hesapId: string,
   values: HareketInput
 ): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const parsed = hareketSchema.safeParse(values);
   if (!parsed.success) return hataSonucu(parsed.error.flatten().fieldErrors);
 
-  await hareketEkle(hesapId, parsed.data);
+  const hareket = await hareketEkle(hesapId, parsed.data);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "ODEME",
+    hedefTip: "HesapHareketi",
+    hedefId: hareket.id,
+    detay: {
+      hesapId,
+      yon: parsed.data.yon,
+      tutar: parsed.data.tutar,
+    },
+  });
 
   revalidatePath("/kasa-banka");
   revalidatePath(`/kasa-banka/${hesapId}`);
@@ -112,9 +133,18 @@ export async function deleteHareket(
   hareketId: string,
   hesapId: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
 
   await hareketSil(hareketId);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "HesapHareketi",
+    hedefId: hareketId,
+    detay: { hesapId },
+  });
 
   revalidatePath("/kasa-banka");
   revalidatePath(`/kasa-banka/${hesapId}`);

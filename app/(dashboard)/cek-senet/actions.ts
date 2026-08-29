@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth-guards";
+import { adminVeyaHata, requireUser } from "@/lib/auth-guards";
+import { auditKaydet } from "@/lib/audit";
+import { prisma } from "@/lib/prisma";
 import {
   cekSenetGuncelle,
   cekSenetOlustur,
@@ -109,9 +111,28 @@ export async function deleteCekSenet(
   id: string,
   cariId: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
+
+  const kayit = await prisma.cekSenet.findUnique({
+    where: { id },
+    select: { tip: true, yon: true, tutar: true },
+  });
 
   await cekSenetSil(id);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "CekSenet",
+    hedefId: id,
+    detay: {
+      tip: kayit?.tip,
+      yon: kayit?.yon,
+      tutar: kayit?.tutar?.toString(),
+      cariId,
+    },
+  });
 
   tazele(cariId);
   redirect("/cek-senet");
@@ -122,18 +143,28 @@ export async function createTahsilat(
   cariId: string,
   values: TahsilatInput
 ): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const parsed = tahsilatSchema.safeParse(values);
   if (!parsed.success) return alanHatasi(parsed.error.flatten().fieldErrors);
 
+  let tahsilatId: string;
   try {
-    await tahsilatEkle(cekSenetId, parsed.data);
+    const tahsilat = await tahsilatEkle(cekSenetId, parsed.data);
+    tahsilatId = tahsilat.id;
   } catch (error) {
     const sonuc = isKuraliHatasi(error);
     if (sonuc) return sonuc;
     throw error;
   }
+
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "TAHSILAT",
+    hedefTip: "CekSenetTahsilat",
+    hedefId: tahsilatId,
+    detay: { cekSenetId, cariId, tutar: parsed.data.tutar },
+  });
 
   tazele(cariId);
   revalidatePath(`/cek-senet/${cekSenetId}`);
@@ -145,9 +176,23 @@ export async function deleteTahsilat(
   cekSenetId: string,
   cariId: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
+
+  const tahsilat = await prisma.cekSenetTahsilat.findUnique({
+    where: { id: tahsilatId },
+    select: { tutar: true },
+  });
 
   await tahsilatSil(tahsilatId);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "CekSenetTahsilat",
+    hedefId: tahsilatId,
+    detay: { cekSenetId, cariId, tutar: tahsilat?.tutar?.toString() },
+  });
 
   tazele(cariId);
   revalidatePath(`/cek-senet/${cekSenetId}`);
@@ -159,7 +204,7 @@ export async function setDurum(
   cariId: string,
   durum: CekSenetDurumuValue
 ): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   try {
     await durumDegistir(id, durum);
@@ -168,6 +213,14 @@ export async function setDurum(
     if (sonuc) return sonuc;
     throw error;
   }
+
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "DURUM",
+    hedefTip: "CekSenet",
+    hedefId: id,
+    detay: { cariId, yeniDurum: durum },
+  });
 
   tazele(cariId);
   revalidatePath(`/cek-senet/${id}`);
@@ -184,7 +237,7 @@ export async function ciroEtAction(
   hedefCariId: string,
   tarih: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const gecerliTarih = /^\d{4}-\d{2}-\d{2}$/.test(tarih.trim());
   if (!gecerliTarih) return { ok: false, error: "Geçerli bir tarih girin." };
@@ -198,6 +251,14 @@ export async function ciroEtAction(
     throw error;
   }
 
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "CIRO",
+    hedefTip: "CekSenet",
+    hedefId: id,
+    detay: { verenCariId: cariId, hedefCariId, tarih },
+  });
+
   tazele(cariId);
   revalidatePath(`/cariler/${hedefCariId}`);
   revalidatePath(`/cek-senet/${id}`);
@@ -209,7 +270,7 @@ export async function ciroGeriAlAction(
   cariId: string,
   hedefCariId: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   try {
     await ciroGeriAl(id);
@@ -218,6 +279,14 @@ export async function ciroGeriAlAction(
     if (sonuc) return sonuc;
     throw error;
   }
+
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "CIRO",
+    hedefTip: "CekSenet",
+    hedefId: id,
+    detay: { verenCariId: cariId, hedefCariId, geriAlindi: true },
+  });
 
   tazele(cariId);
   revalidatePath(`/cariler/${hedefCariId}`);

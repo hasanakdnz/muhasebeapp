@@ -45,6 +45,7 @@ export function OdemePaneli({
   odemeler,
   tahsilatlar,
   bugun,
+  yonetici,
 }: {
   islemId: string;
   cariId: string;
@@ -53,6 +54,7 @@ export function OdemePaneli({
   odemeler: OdemeSatiri[];
   tahsilatlar: KullanilabilirTahsilat[];
   bugun: string;
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [tutar, setTutar] = React.useState("");
@@ -259,8 +261,13 @@ export function OdemePaneli({
                     variant="text"
                     className="h-8 px-2"
                     onClick={() => setSilinecek(odeme)}
-                    disabled={pending}
+                    disabled={pending || !yonetici}
                     aria-label="Ödemeyi sil"
+                    title={
+                      yonetici
+                        ? undefined
+                        : "Ödeme kaydını yalnızca yönetici silebilir."
+                    }
                   >
                     <Trash2 />
                   </Button>

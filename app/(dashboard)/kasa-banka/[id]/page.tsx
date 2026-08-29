@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
+import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { HareketForm } from "@/components/kasa/hareket-form";
 import { HareketListesi } from "@/components/kasa/hareket-listesi";
@@ -27,6 +28,8 @@ export default async function HesapDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
+  const yonetici = await isAdmin();
   const hesap = await getHesap(id);
   if (!hesap) notFound();
 
@@ -51,6 +54,7 @@ export default async function HesapDetayPage({
               Düzenle
             </Link>
             <HesapActions
+              yonetici={yonetici}
               id={hesap.id}
               ad={hesap.ad}
               aktif={hesap.aktif}
@@ -94,7 +98,7 @@ export default async function HesapDetayPage({
             description="Yukarıdaki formdan ilk giriş veya çıkışı kaydedin."
           />
         ) : (
-          <HareketListesi hesapId={hesap.id} hareketler={hareketler} />
+          <HareketListesi hesapId={hesap.id} hareketler={hareketler} yonetici={yonetici} />
         )}
       </div>
     </div>

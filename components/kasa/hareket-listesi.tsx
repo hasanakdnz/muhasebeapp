@@ -27,9 +27,11 @@ import { deleteHareket } from "@/app/(dashboard)/kasa-banka/actions";
 export function HareketListesi({
   hesapId,
   hareketler,
+  yonetici,
 }: {
   hesapId: string;
   hareketler: HareketSatiri[];
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [silinecek, setSilinecek] = React.useState<HareketSatiri | null>(null);
@@ -83,8 +85,13 @@ export function HareketListesi({
                   variant="text"
                   className="h-8 px-2"
                   onClick={() => setSilinecek(hareket)}
-                  disabled={pending}
+                  disabled={pending || !yonetici}
                   aria-label="Hareketi sil"
+                  title={
+                    yonetici
+                      ? undefined
+                      : "Hareket kaydını yalnızca yönetici silebilir."
+                  }
                 >
                   <Trash2 />
                 </Button>

@@ -6,7 +6,8 @@ import type { Role } from "@/lib/generated/prisma/enums";
  * Yetki politikası tek yerde tutulur; yeni sayfa eklenince yalnızca bu tablo
  * güncellenir. Burada listelenmeyen dashboard sayfaları her iki role de açıktır.
  */
-export const ADMIN_ONLY_PREFIXES = ["/ayarlar"] as const;
+// Denetim kaydı kimin ne yaptığını gösterir — yalnızca yönetici görür.
+export const ADMIN_ONLY_PREFIXES = ["/ayarlar", "/kayitlar"] as const;
 
 export function isAdminOnlyPath(pathname: string): boolean {
   return ADMIN_ONLY_PREFIXES.some(

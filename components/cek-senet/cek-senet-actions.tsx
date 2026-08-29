@@ -19,11 +19,13 @@ export function CekSenetActions({
   cariId,
   durum,
   tahsilatSayisi,
+  yonetici,
 }: {
   id: string;
   cariId: string;
   durum: CekSenetDurumuValue;
   tahsilatSayisi: number;
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [acik, setAcik] = React.useState(false);
@@ -79,10 +81,16 @@ export function CekSenetActions({
           </Select>
         </div>
 
-        <Button variant="text" onClick={() => setAcik(true)} disabled={pending}>
-          <Trash2 />
-          Sil
-        </Button>
+        {yonetici && (
+          <Button
+            variant="text"
+            onClick={() => setAcik(true)}
+            disabled={pending}
+          >
+            <Trash2 />
+            Sil
+          </Button>
+        )}
       </div>
 
       {hata && (

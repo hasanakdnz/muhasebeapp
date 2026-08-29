@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth-guards";
+import { adminVeyaHata, requireUser } from "@/lib/auth-guards";
+import { auditKaydet } from "@/lib/audit";
+import { prisma } from "@/lib/prisma";
 import {
   giderBelgesiniKaldir,
   giderGuncelle,
@@ -93,18 +95,46 @@ export async function updateGider(
 }
 
 export async function deleteGider(id: string): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
+
+  const gider = await prisma.gider.findUnique({
+    where: { id },
+    select: { kategori: true, tutar: true, aciklama: true },
+  });
 
   await giderSil(id);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "Gider",
+    hedefId: id,
+    detay: {
+      kategori: gider?.kategori,
+      tutar: gider?.tutar?.toString(),
+      aciklama: gider?.aciklama,
+    },
+  });
 
   tazele();
   redirect("/giderler");
 }
 
 export async function removeBelge(id: string): Promise<ActionResult> {
-  await requireUser();
+  // Belge kaldırma da geri alınamaz (dosya diskten silinir) — yönetici işi.
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
 
   await giderBelgesiniKaldir(id);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "Gider",
+    hedefId: id,
+    detay: { alan: "belge" },
+  });
 
   tazele(id);
   return { ok: true };

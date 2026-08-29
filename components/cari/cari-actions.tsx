@@ -12,11 +12,14 @@ export function CariActions({
   unvan,
   aktif,
   silinebilir,
+  yonetici,
 }: {
   id: string;
   unvan: string;
   aktif: boolean;
   silinebilir: boolean;
+  /** Silme yalnızca yöneticide (RBAC); personelde düğme hiç görünmez. */
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = React.useState<"sil" | "pasif" | null>(null);
@@ -57,19 +60,21 @@ export function CariActions({
           {aktif ? "Pasife al" : "Aktife al"}
         </Button>
 
-        <Button
-          variant="text"
-          onClick={() => setDialog("sil")}
-          disabled={pending || !silinebilir}
-          title={
-            silinebilir
-              ? undefined
-              : "Muhasebe kaydı olan cari silinemez; pasife alabilirsiniz."
-          }
-        >
-          <Trash2 />
-          Sil
-        </Button>
+        {yonetici && (
+          <Button
+            variant="text"
+            onClick={() => setDialog("sil")}
+            disabled={pending || !silinebilir}
+            title={
+              silinebilir
+                ? undefined
+                : "Muhasebe kaydı olan cari silinemez; pasife alabilirsiniz."
+            }
+          >
+            <Trash2 />
+            Sil
+          </Button>
+        )}
       </div>
 
       {hata && (

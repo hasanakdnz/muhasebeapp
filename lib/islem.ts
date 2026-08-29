@@ -10,9 +10,12 @@ import {
   odemeCariEtkisi,
   type OdemeStatusuValue,
 } from "@/lib/domain/odeme";
-import type { PrismaClient } from "@/lib/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 
 export type Db = PrismaClient;
+
+/** Transaction içindeki istemci — $transaction'ı yoktur, iç içe açılamaz. */
+export type Tx = Prisma.TransactionClient;
 
 // Saf KDV/bakiye mantığı lib/domain/islem.ts içindedir.
 export {
@@ -179,9 +182,18 @@ export async function getIslem(
  * günceller. Bakiye mevcut değere işlem etkisi eklenerek Decimal ile bulunur —
  * SQL SUM() kullanılmaz (SQLite'ta float aritmetiğine düşer).
  */
-export async function islemOlustur(
-  veri: IslemYaziVerisi,
-  db: Db = prisma
+/**
+ * İşlem yazımının transaction İÇİ gövdesi.
+ *
+ * Ayrı durmasının nedeni: proformadan faturaya dönüşüm, faturayı oluşturup
+ * teklifi aynı anda kilitlemek zorunda — ikisi tek transaction'da olmalı.
+ * Prisma'da transaction iç içe açılamadığı için `islemOlustur` doğrudan
+ * çağrılamıyordu. Mantık burada tek yerde durur; iki çağıran da aynı KDV ve
+ * bakiye kurallarını kullanır.
+ */
+export async function islemYaz(
+  tx: Tx,
+  veri: IslemYaziVerisi
 ): Promise<{ id: string }> {
   if (veri.kalemler.length === 0) {
     throw new Error("İşlemde en az bir kalem olmalı.");
@@ -190,40 +202,45 @@ export async function islemOlustur(
   const toplamlar = hesaplaIslemToplamlari(veri.kalemler);
   const etki = cariBakiyeEtkisi(veri.tip, toplamlar.toplamTutar);
 
-  return db.$transaction(async (tx) => {
-    const cari = await tx.cari.findUnique({
-      where: { id: veri.cariId },
-      select: { bakiye: true },
-    });
-    if (!cari) throw new Error("Cari bulunamadı.");
-
-    const islem = await tx.islem.create({
-      data: {
-        tip: veri.tip,
-        cariId: veri.cariId,
-        tarih: veri.tarih,
-        vadeTarihi: veri.vadeTarihi ?? null,
-        toplamTutar: toplamlar.toplamTutar,
-        kdvTutari: toplamlar.kdvTutari,
-        kalemler: {
-          create: veri.kalemler.map((k) => ({
-            urunAdi: k.urunAdi,
-            miktar: k.miktar,
-            birimFiyat: k.birimFiyat,
-            kdvOrani: k.kdvOrani,
-          })),
-        },
-      },
-      select: { id: true },
-    });
-
-    await tx.cari.update({
-      where: { id: veri.cariId },
-      data: { bakiye: roundMoney(cari.bakiye).plus(etki).toString() },
-    });
-
-    return islem;
+  const cari = await tx.cari.findUnique({
+    where: { id: veri.cariId },
+    select: { bakiye: true },
   });
+  if (!cari) throw new Error("Cari bulunamadı.");
+
+  const islem = await tx.islem.create({
+    data: {
+      tip: veri.tip,
+      cariId: veri.cariId,
+      tarih: veri.tarih,
+      vadeTarihi: veri.vadeTarihi ?? null,
+      toplamTutar: toplamlar.toplamTutar,
+      kdvTutari: toplamlar.kdvTutari,
+      kalemler: {
+        create: veri.kalemler.map((k) => ({
+          urunAdi: k.urunAdi,
+          miktar: k.miktar,
+          birimFiyat: k.birimFiyat,
+          kdvOrani: k.kdvOrani,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+
+  await tx.cari.update({
+    where: { id: veri.cariId },
+    data: { bakiye: roundMoney(cari.bakiye).plus(etki).toString() },
+  });
+
+  return islem;
+}
+
+export async function islemOlustur(
+  veri: IslemYaziVerisi,
+  db: Db = prisma
+): Promise<{ id: string }> {
+  return db.$transaction((tx) => islemYaz(tx, veri));
 }
 
 /** İşlemi siler ve cari bakiyesine ters etkiyi uygulayarak geri alır. */

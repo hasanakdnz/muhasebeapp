@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth-guards";
+import { adminVeyaHata, requireUser } from "@/lib/auth-guards";
+import { auditKaydet } from "@/lib/audit";
+import { prisma } from "@/lib/prisma";
 import { kdvDahilNete } from "@/lib/domain/islem";
 import { islemOlustur, islemSil } from "@/lib/islem";
 import { odemeEkle, odemeSil } from "@/lib/odeme";
@@ -73,9 +75,29 @@ export async function deleteIslem(
   id: string,
   cariId: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
+
+  // Silinen kaydın kimliği log için silmeden ÖNCE okunur.
+  const islem = await prisma.islem.findUnique({
+    where: { id },
+    select: { tip: true, tarih: true, toplamTutar: true },
+  });
 
   await islemSil(id);
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "Islem",
+    hedefId: id,
+    detay: {
+      tip: islem?.tip,
+      tarih: islem?.tarih?.toISOString(),
+      tutar: islem?.toplamTutar?.toString(),
+      cariId,
+    },
+  });
 
   tazele(cariId);
   redirect("/islemler");
@@ -104,7 +126,7 @@ export async function createOdeme(
   cariId: string,
   veri: OdemeInput
 ): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   // Client tarafında da doğrulanır; server asla client'a güvenmez (CLAUDE.md).
   // Tutar burada kullanıcı biçiminden ("3.930,00") kanonik Decimal'e çevrilir —
@@ -115,19 +137,34 @@ export async function createOdeme(
     return { ok: false, error: ilkHata };
   }
 
+  let odemeId: string;
   try {
-    await odemeEkle(islemId, {
+    const odeme = await odemeEkle(islemId, {
       tutar: parsed.data.tutar,
       tarih: parsed.data.tarih,
       kaynak: parsed.data.kaynak,
       cekSenetTahsilatId: parsed.data.cekSenetTahsilatId,
       aciklama: parsed.data.aciklama,
     });
+    odemeId = odeme.id;
   } catch (error) {
     const sonuc = isKuraliHatasi(error);
     if (sonuc) return sonuc;
     throw error;
   }
+
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "ODEME",
+    hedefTip: "IslemOdeme",
+    hedefId: odemeId,
+    detay: {
+      islemId,
+      cariId,
+      tutar: parsed.data.tutar,
+      kaynak: parsed.data.kaynak,
+    },
+  });
 
   tazele(cariId);
   revalidatePath(`/islemler/${islemId}`);
@@ -139,7 +176,14 @@ export async function deleteOdeme(
   islemId: string,
   cariId: string
 ): Promise<ActionResult> {
-  await requireUser();
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
+
+  const odeme = await prisma.islemOdeme.findUnique({
+    where: { id: odemeId },
+    select: { tutar: true, kaynak: true },
+  });
 
   try {
     await odemeSil(odemeId);
@@ -148,6 +192,19 @@ export async function deleteOdeme(
     if (sonuc) return sonuc;
     throw error;
   }
+
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "IslemOdeme",
+    hedefId: odemeId,
+    detay: {
+      islemId,
+      cariId,
+      tutar: odeme?.tutar?.toString(),
+      kaynak: odeme?.kaynak,
+    },
+  });
 
   tazele(cariId);
   revalidatePath(`/islemler/${islemId}`);

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth-guards";
+import { adminVeyaHata, requireUser } from "@/lib/auth-guards";
+import { auditKaydet } from "@/lib/audit";
 import { cariGuncelle, cariOlustur, cariSilinebilirMi } from "@/lib/cari";
 import { prisma } from "@/lib/prisma";
 import { cariSchema, type CariInput } from "@/lib/validations/cari";
@@ -64,7 +65,10 @@ export async function updateCari(
  * Kayıt varsa doğru aksiyon pasife almaktır — bu, kullanıcıya söylenir.
  */
 export async function deleteCari(id: string): Promise<ActionResult> {
-  await requireUser();
+  // Silme yönetici yetkisi ister (RBAC): personel kayıt girer, yönetici siler.
+  const yetki = await adminVeyaHata();
+  if (!yetki.ok) return yetki;
+  const user = yetki.user;
 
   const durum = await cariSilinebilirMi(id);
   if (!durum.silinebilir) {
@@ -78,7 +82,20 @@ export async function deleteCari(id: string): Promise<ActionResult> {
     };
   }
 
+  const cari = await prisma.cari.findUnique({
+    where: { id },
+    select: { unvan: true },
+  });
+
   await prisma.cari.delete({ where: { id } });
+  await auditKaydet({
+    userId: user.id,
+    aksiyon: "SIL",
+    hedefTip: "Cari",
+    hedefId: id,
+    detay: { unvan: cari?.unvan },
+  });
+
   revalidatePath("/cariler");
   redirect("/cariler");
 }

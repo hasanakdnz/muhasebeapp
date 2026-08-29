@@ -10,9 +10,11 @@ import { deleteGider, removeBelge } from "@/app/(dashboard)/giderler/actions";
 export function GiderActions({
   id,
   belgeVarMi,
+  yonetici,
 }: {
   id: string;
   belgeVarMi: boolean;
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = React.useState<"sil" | "belge" | null>(null);
@@ -54,10 +56,16 @@ export function GiderActions({
             Belgeyi kaldır
           </Button>
         )}
-        <Button variant="text" onClick={() => setDialog("sil")} disabled={pending}>
-          <Trash2 />
-          Sil
-        </Button>
+        {yonetici && (
+          <Button
+            variant="text"
+            onClick={() => setDialog("sil")}
+            disabled={pending}
+          >
+            <Trash2 />
+            Sil
+          </Button>
+        )}
       </div>
 
       {hata && (

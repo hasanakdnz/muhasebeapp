@@ -41,9 +41,11 @@ import {
 export function TahsilatPaneli({
   cekSenet,
   bugun,
+  yonetici,
 }: {
   cekSenet: CekSenetDetay;
   bugun: string;
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [silinecek, setSilinecek] = React.useState<TahsilatSatiri | null>(null);
@@ -189,8 +191,13 @@ export function TahsilatPaneli({
                     variant="text"
                     className="h-8 px-2"
                     onClick={() => setSilinecek(tahsilat)}
-                    disabled={pending}
+                    disabled={pending || !yonetici}
                     aria-label="Tahsilatı sil"
+                    title={
+                      yonetici
+                        ? undefined
+                        : "Tahsilat kaydını yalnızca yönetici silebilir."
+                    }
                   >
                     <Trash2 />
                   </Button>

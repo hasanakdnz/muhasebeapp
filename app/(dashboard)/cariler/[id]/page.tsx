@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
+import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { CariActions } from "@/components/cari/cari-actions";
 import { Amount } from "@/components/ui/amount";
@@ -32,6 +33,8 @@ export default async function CariDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
+  const yonetici = await isAdmin();
   const cari = await getCari(id);
   if (!cari) notFound();
 
@@ -58,6 +61,7 @@ export default async function CariDetayPage({
               Düzenle
             </Link>
             <CariActions
+              yonetici={yonetici}
               id={cari.id}
               unvan={cari.unvan}
               aktif={cari.aktif}

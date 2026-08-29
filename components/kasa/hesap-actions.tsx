@@ -15,11 +15,13 @@ export function HesapActions({
   ad,
   aktif,
   silinebilir,
+  yonetici,
 }: {
   id: string;
   ad: string;
   aktif: boolean;
   silinebilir: boolean;
+  yonetici: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = React.useState<"sil" | "pasif" | null>(null);
@@ -60,19 +62,21 @@ export function HesapActions({
           {aktif ? "Pasife al" : "Aktife al"}
         </Button>
 
-        <Button
-          variant="text"
-          onClick={() => setDialog("sil")}
-          disabled={pending || !silinebilir}
-          title={
-            silinebilir
-              ? undefined
-              : "Hareketi olan hesap silinemez; pasife alabilirsiniz."
-          }
-        >
-          <Trash2 />
-          Sil
-        </Button>
+        {yonetici && (
+          <Button
+            variant="text"
+            onClick={() => setDialog("sil")}
+            disabled={pending || !silinebilir}
+            title={
+              silinebilir
+                ? undefined
+                : "Hareketi olan hesap silinemez; pasife alabilirsiniz."
+            }
+          >
+            <Trash2 />
+            Sil
+          </Button>
+        )}
       </div>
 
       {hata && (

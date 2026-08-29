@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { IslemActions } from "@/components/islem/islem-actions";
 import { OdemePaneli } from "@/components/islem/odeme-panel";
@@ -31,6 +32,8 @@ export default async function IslemDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
+  const yonetici = await isAdmin();
   const islem = await getIslem(id);
   if (!islem) notFound();
 
@@ -62,6 +65,7 @@ export default async function IslemDetayPage({
               Cari kartına git
             </Link>
             <IslemActions
+              yonetici={yonetici}
               id={islem.id}
               cariId={islem.cariId}
               cariUnvan={islem.cariUnvan}
@@ -117,6 +121,7 @@ export default async function IslemDetayPage({
       <Card className="flex flex-col gap-6">
         <CardTitle>Ödemeler</CardTitle>
         <OdemePaneli
+              yonetici={yonetici}
           islemId={islem.id}
           cariId={islem.cariId}
           kalanTutar={islem.kalanTutar}

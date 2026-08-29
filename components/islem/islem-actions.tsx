@@ -11,11 +11,13 @@ export function IslemActions({
   cariId,
   cariUnvan,
   toplamTutar,
+  yonetici,
 }: {
   id: string;
   cariId: string;
   cariUnvan: string;
   toplamTutar: string;
+  yonetici: boolean;
 }) {
   const [acik, setAcik] = React.useState(false);
   const [hata, setHata] = React.useState<string | null>(null);
@@ -35,10 +37,12 @@ export function IslemActions({
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <Button variant="text" onClick={() => setAcik(true)} disabled={pending}>
-        <Trash2 />
-        Sil
-      </Button>
+      {yonetici && (
+        <Button variant="text" onClick={() => setAcik(true)} disabled={pending}>
+          <Trash2 />
+          Sil
+        </Button>
+      )}
 
       {hata && (
         <p role="alert" className="text-body-sm text-red">

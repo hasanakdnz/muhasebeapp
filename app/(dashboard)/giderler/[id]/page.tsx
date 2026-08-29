@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink, Pencil } from "lucide-react";
+import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { GiderActions } from "@/components/gider/gider-actions";
 import { Amount } from "@/components/ui/amount";
@@ -18,6 +19,8 @@ export default async function GiderDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
+  const yonetici = await isAdmin();
   const gider = await getGider(id);
   if (!gider) notFound();
 
@@ -38,7 +41,7 @@ export default async function GiderDetayPage({
               <Pencil />
               Düzenle
             </Link>
-            <GiderActions id={gider.id} belgeVarMi={Boolean(gider.belgeUrl)} />
+            <GiderActions id={gider.id} belgeVarMi={Boolean(gider.belgeUrl)} yonetici={yonetici} />
           </div>
         }
       />
