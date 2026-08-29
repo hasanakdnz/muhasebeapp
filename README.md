@@ -34,6 +34,22 @@ npm run dev
 | `npm run db:seed` | Geliştirme verisini yükler |
 | `npm run db:studio` | Prisma Studio |
 
+## Raporlar ve dışa aktarım
+
+Dört rapor: KDV, yaşlandırma (aging), kasa/banka ekstresi, satış performansı.
+Dönem URL'de taşınır — rapor paylaşılabilir ve yer imine eklenebilir.
+
+- **Excel:** CSV olarak indirilir. Türkçe Excel'in doğru açması için ayraç
+  NOKTALI VİRGÜL ve dosya başında UTF-8 BOM vardır; tutarlar Türkçe ondalık
+  ayracıyla yazılır. Gerçek .xlsx ek bir kütüphane gerektirir, gerekirse
+  sonradan eklenebilir.
+- **PDF:** Ayrı bir PDF kütüphanesi yerine baskı stili kullanılır
+  (`@media print`): "PDF / Yazdır" butonu tarayıcı baskısını açar, ekran öğeleri
+  (menü, filtreler, butonlar) gizlenir ve çıktı DESIGN.md tipografisini korur.
+- **Yaşlandırma kovaları:** 0-30 / 31-60 / 60+ gün. "60+" 60'tan BÜYÜK demektir;
+  60. gün 31-60 kovasındadır. Vadesi gelmemiş tutar ayrı gösterilir, yaşlandırılmaz.
+  Yaşlandırma tabanı vade tarihidir; vade girilmemişse belge tarihi kullanılır.
+
 ## Vade bildirimi (cron)
 
 Vadesi geçen/yaklaşan çek-senetleri yöneticilere bildiren job dış bir

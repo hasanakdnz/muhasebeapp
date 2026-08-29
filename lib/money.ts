@@ -88,6 +88,14 @@ export function formatSignedTRY(
   return `${dec.isNegative() ? "-" : "+"}${formatted}`;
 }
 
+/**
+ * Yüzde gösterimi — Türkçe ondalık ayracıyla ("75,02").
+ * Decimal.toString() nokta üretir; ekranda ve Excel'de bu yanlış okunur.
+ */
+export function formatYuzde(value: DecimalLike, basamak = 2): string {
+  return formatAmount(value, { decimals: basamak });
+}
+
 export type AmountTone = "positive" | "negative" | "zero";
 
 /** Renk seçimi için: yalnızca green / red / nötr. Marka rengi (ink) tutar rengi değildir. */

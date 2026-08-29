@@ -8,6 +8,7 @@ import {
   parseAmountInput,
   roundMoney,
   toDecimal,
+  formatYuzde,
 } from "@/lib/money";
 
 describe("toDecimal", () => {
@@ -149,5 +150,19 @@ describe("formatAmount → parseAmountInput gidiş-dönüşü", () => {
         roundMoney(ham).toString()
       );
     }
+  });
+});
+
+describe("formatYuzde", () => {
+  it("Türkçe ondalık ayracı kullanır", () => {
+    // Decimal.toString() nokta üretir; ekranda ve Excel'de yanlış okunur.
+    expect(formatYuzde("75.02")).toBe("75,02");
+    expect(formatYuzde("100")).toBe("100,00");
+    expect(formatYuzde("0")).toBe("0,00");
+  });
+
+  it("basamak sayısı ayarlanabilir", () => {
+    expect(formatYuzde("33.333", 1)).toBe("33,3");
+    expect(formatYuzde("33.333", 0)).toBe("33");
   });
 });

@@ -21,6 +21,7 @@ import {
   kategoriDagilimi,
   listeleGiderler,
 } from "@/lib/gider";
+import { formatYuzde } from "@/lib/money";
 
 export const metadata: Metadata = { title: "Giderler · Muhasebe" };
 
@@ -100,7 +101,7 @@ export default async function GiderlerPage({
                 </dt>
                 <dd className="flex items-baseline gap-4">
                   <span className="text-body-sm text-muted" data-numeric="">
-                    %{d.yuzde}
+                    %{formatYuzde(d.yuzde)}
                   </span>
                   <Amount value={d.toplam} />
                 </dd>

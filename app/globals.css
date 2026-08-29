@@ -192,3 +192,47 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* =========================================================================
+   Baskı (PDF dışa aktarım)
+   Raporlar ayrı bir PDF kütüphanesi yerine tarayıcının baskı çıktısıyla
+   dışa aktarılır (Ctrl+P → PDF olarak kaydet). Çıktı DESIGN.md tipografisini
+   korur; ekrana ait öğeler (menü, butonlar, filtreler) gizlenir.
+   ========================================================================= */
+
+@media print {
+  /* Baskıda gereksiz olan ekran öğeleri. */
+  aside,
+  header,
+  [data-print="gizle"] {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /* Kart zeminleri baskıda mürekkep harcamasın; ayrım ince çizgiyle kurulur. */
+  [data-print="kart"] {
+    border: 1px solid var(--color-border);
+    background: transparent !important;
+  }
+
+  /* Tablo satırları sayfa sonunda ikiye bölünmesin. */
+  tr,
+  thead {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}
