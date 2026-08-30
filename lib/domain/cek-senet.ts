@@ -3,13 +3,24 @@ import { roundMoney, toDecimal, type DecimalLike } from "@/lib/money";
 /**
  * Çek/Senet ve kısmi tahsilat mantığı — saf, Prisma'sız, doğrudan test edilebilir.
  *
- * ## Bakiye modeli (ROADMAP Faz 4 doğrulaması: "cari bakiyeye yansıma")
- * Çek/senedin KAYDEDİLMESİ cari bakiyesini değiştirmez; borç, para fiilen
- * tahsil edildikçe kapanır. Böylece karşılıksız çıkan bir çekte ek bir düzeltme
- * gerekmez — borç zaten hiç azalmamıştır.
+ * ## Bakiye modeli
+ * Çek cari bakiyesini ELE GEÇTİĞİ ANDA etkiler; tahsilat cariye DOKUNMAZ.
+ * Türkiye'deki standart uygulama budur (`101 Alınan Çekler / 120 Alıcılar`):
+ * müşteri borcuna karşılık çeki verdiğinde cari hesabı kapanır, risk çek
+ * portföyüne taşınır.
  *
- *  - ALINAN  (müşteriden): tahsil edilince carinin bize borcu AZALIR → bakiye düşer.
- *  - VERILEN (tedarikçiye): ödenince bizim borcumuz AZALIR → bakiye yükselir.
+ *  - ALINAN  (müşteriden): çek alınınca carinin bize borcu KAPANIR → bakiye düşer.
+ *  - VERILEN (tedarikçiye): çek verilince bizim borcumuz KAPANIR → bakiye yükselir.
+ *
+ * Önceki sürümde etki tahsilat anında işleniyordu. O model, karşılıksız çekte
+ * düzeltme gerektirmemesi için seçilmişti; ama nadir durumu kolaylaştırırken
+ * sık durumu bozuyordu: müşterinin kapanmış borcu hem cari alacağında hem çek
+ * portföyünde görünüyor, alacak ÇİFT SAYILIYORDU (10.000'lik alacak 20.000
+ * gösteriliyordu).
+ *
+ * Karşılıksız çıkan çekte borç geri gelir: net etki yalnızca FİİLEN tahsil
+ * edilen kadardır. Kısmen tahsil edilip sonra yanan çekte de bu doğru sonucu
+ * verir — tahsil edilemeyen kısım borç olarak geri döner.
  *
  * ## Durum geçişleri
  * Şemada "kısmi tahsil edildi" diye bir durum YOK. Bu yüzden:
@@ -190,16 +201,25 @@ export function durumDegisikligiKontrol(
 }
 
 /**
- * Bir tahsilatın cari bakiyesine etkisi.
- * ALINAN tahsil edilince carinin borcu azalır (bakiye düşer);
- * VERILEN ödenince bizim borcumuz azalır (bakiye yükselir).
+ * Bir çek/senet KAYDININ cari bakiyesine etkisi.
+ *
+ * Etki çekin varlığından doğar, tahsilatından değil. Karşılıksız çıkan çekte
+ * tahsil edilemeyen kısım borç olarak geri döner; bu yüzden KARSILIKSIZ
+ * durumunda etkin tutar, fiilen tahsil edilen kadardır.
+ *
+ * CIRO_EDILDI durumunda etki DEĞİŞMEZ: çeki veren müşterinin borcu çeki
+ * verdiği anda kapanmıştı, çekin sonradan başkasına devredilmesi onu
+ * ilgilendirmez (cironun karşı taraf etkisi için `ciroHedefEtkisi`).
  */
-export function cariEtkisi(
+export function cekCariEtkisi(
   yon: CekSenetYonuValue,
-  tahsilatTutari: DecimalLike
+  durum: CekSenetDurumuValue,
+  tutar: DecimalLike,
+  tahsilEdilen: DecimalLike
 ): string {
-  const tutar = roundMoney(tahsilatTutari);
-  return (yon === "ALINAN" ? tutar.negated() : tutar).toString();
+  const etkin =
+    durum === "KARSILIKSIZ" ? roundMoney(tahsilEdilen) : roundMoney(tutar);
+  return (yon === "ALINAN" ? etkin.negated() : etkin).toString();
 }
 
 /** Bir tahsilatın geri alınması için uygulanacak ters etki. */
@@ -303,24 +323,16 @@ export function ciroKontrol(
   return { gecerli: true };
 }
 
-export type CiroEtkileri = {
-  /** Çeki bize veren müşteri: borcu kapanır → bakiye düşer. */
-  verenCari: string;
-  /** Çeki devrettiğimiz tedarikçi: ona borcumuz azalır → bakiye yükselir. */
-  alanCari: string;
-};
-
 /**
- * Cironun iki taraflı bakiye etkisi.
+ * Cironun HEDEF cariye etkisi.
  *
- * Ciro edilen çek hiç tahsil edilmez, ama değeri kullanılmıştır: müşteri
- * borcunu ödemiş, biz de tedarikçiye ödeme yapmış oluruz. Bu yüzden ciro,
- * tam tahsilat ile aynı büyüklükte fakat İKİ cariye yayılan bir etkidir.
+ * Ciroda çek elimizden çıkar ve tedarikçiye olan borcumuz azalır → hedef
+ * carinin bakiyesi yükselir.
+ *
+ * Çeki bize VEREN müşteri burada yer almaz: onun borcu çeki verdiği anda
+ * `cekCariEtkisi` ile zaten kapanmıştı. Eski (tahsilat bazlı) modelde ciro
+ * iki taraflıydı, çünkü veren tarafın borcu o ana kadar açık duruyordu.
  */
-export function ciroEtkileri(tutar: DecimalLike): CiroEtkileri {
-  const t = roundMoney(tutar);
-  return {
-    verenCari: t.negated().toString(),
-    alanCari: t.toString(),
-  };
+export function ciroHedefEtkisi(tutar: DecimalLike): string {
+  return roundMoney(tutar).toString();
 }

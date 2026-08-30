@@ -7,10 +7,11 @@ import {
   hesaplaCariBakiyesi,
 } from "@/lib/domain/islem";
 import {
-  cariEtkisi as tahsilatCariEtkisi,
-  ciroEtkileri,
+  cekCariEtkisi,
+  ciroHedefEtkisi,
 } from "@/lib/domain/cek-senet";
 import { odemeCariEtkisi } from "@/lib/domain/odeme";
+import type { Tx } from "@/lib/islem";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { CariTipiValue } from "@/lib/validations/cari";
 
@@ -84,32 +85,29 @@ function ortakAlanlar(veri: CariYaziVerisi) {
  *
  * Dört kaynak vardır ve hepsi sayılmalıdır:
  *  1. Satış/alış işlemleri
- *  2. Çek/senet tahsilatları
- *  3. Ciro edilen çekler — ciro İKİ cariyi birden etkiler: çeki veren
- *     müşterinin borcu kapanır, çekin devredildiği tedarikçiye olan borcumuz
- *     azalır. Bu yüzden cari hem "veren" hem "alan" tarafta aranır.
+ *  2. Bu cariye ait çek/senet KAYITLARI — etki çekin alındığı/verildiği anda
+ *     doğar, tahsilatta değil (bkz. lib/domain/cek-senet.ts bakiye modeli).
+ *     Tahsilat kayıtları bu yüzden burada SAYILMAZ; sayılsaydı aynı para iki
+ *     kez düşerdi.
+ *  3. BU cariye ciro edilmiş çekler — ciro edilen çekte yalnızca hedef cari
+ *     etkilenir; çeki veren müşterinin borcu (2)'de zaten kapanmıştır.
  *  4. DİREKT fatura ödemeleri (nakit/banka).
  *
- * Çek tahsilatından doğan fatura ödemeleri burada SAYILMAZ: o para (2)'de
- * zaten sayıldı, tekrar sayılırsa çift sayım olur. odemeCariEtkisi bu ayrımı
+ * Çek tahsilatından doğan fatura ödemeleri burada SAYILMAZ: o borç (2)'de
+ * zaten kapandı, tekrar sayılırsa çift sayım olur. odemeCariEtkisi bu ayrımı
  * yapar ve CEK_TAHSILATI için sıfır döner.
  *
  * Biri unutulursa `bakiye = açılış + Σ etki` değişmezi yanlış alarm verir.
  */
-async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
-  const [islemler, tahsilatlar, ciroVerilen, ciroAlinan, odemeler] = await Promise.all([
+async function cariEtkileri(cariId: string, db: Tx): Promise<string[]> {
+  const [islemler, cekler, ciroAlinan, odemeler] = await Promise.all([
     db.islem.findMany({
       where: { cariId },
       select: { tip: true, toplamTutar: true },
     }),
-    db.cekSenetTahsilat.findMany({
-      where: { cekSenet: { cariId } },
-      select: { tutar: true, cekSenet: { select: { yon: true } } },
-    }),
-    // Bu carinin verdiği, sonra başkasına ciro edilen çekler.
     db.cekSenet.findMany({
-      where: { cariId, durum: "CIRO_EDILDI" },
-      select: { tutar: true },
+      where: { cariId },
+      select: { yon: true, durum: true, tutar: true, tahsilEdilen: true },
     }),
     // Başkasından alınıp BU cariye ciro edilen çekler.
     db.cekSenet.findMany({
@@ -124,15 +122,47 @@ async function cariEtkileri(cariId: string, db: Db): Promise<string[]> {
 
   return [
     ...islemler.map((i) => cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())),
-    ...tahsilatlar.map((t) =>
-      tahsilatCariEtkisi(t.cekSenet.yon, t.tutar.toString())
+    ...cekler.map((c) =>
+      cekCariEtkisi(
+        c.yon,
+        c.durum,
+        c.tutar.toString(),
+        c.tahsilEdilen.toString()
+      )
     ),
-    ...ciroVerilen.map((c) => ciroEtkileri(c.tutar.toString()).verenCari),
-    ...ciroAlinan.map((c) => ciroEtkileri(c.tutar.toString()).alanCari),
+    ...ciroAlinan.map((c) => ciroHedefEtkisi(c.tutar.toString())),
     ...odemeler.map((o) =>
       odemeCariEtkisi(o.islem.tip, o.kaynak, o.tutar.toString())
     ),
   ];
+}
+
+/**
+ * Carinin yürüyen bakiyesini KAYNAKLARDAN yeniden hesaplayıp yazar.
+ *
+ * Çek/senet tarafındaki her mutasyon bunu çağırır. Alternatifi, her fonksiyonda
+ * `bakiye ± x` artımlı aritmetiği yapmaktı; sekiz ayrı yerde tekrarlanan bu
+ * yöntem tek bir unutulan durumda sessizce sürüklenir. Yeniden hesaplama
+ * mutabakat fonksiyonuyla AYNI kaynağı kullanır, dolayısıyla ikisi tanım gereği
+ * ayrışamaz.
+ */
+export async function cariBakiyesiniYenile(
+  cariId: string,
+  tx: Tx
+): Promise<void> {
+  const cari = await tx.cari.findUnique({
+    where: { id: cariId },
+    select: { acilisBakiyesi: true },
+  });
+  if (!cari) throw new Error("Cari bulunamadı.");
+
+  const etkiler = await cariEtkileri(cariId, tx);
+  await tx.cari.update({
+    where: { id: cariId },
+    data: {
+      bakiye: hesaplaCariBakiyesi(cari.acilisBakiyesi.toString(), etkiler),
+    },
+  });
 }
 
 function aramaKosulu(q: string) {
@@ -241,7 +271,7 @@ export async function cariGuncelle(
   const acilis = roundMoney(veri.acilisBakiyesi).toString();
 
   await db.$transaction(async (tx) => {
-    const etkiler = await cariEtkileri(id, tx as Db);
+    const etkiler = await cariEtkileri(id, tx);
 
     await tx.cari.update({
       where: { id },

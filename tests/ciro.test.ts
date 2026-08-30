@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./helpers/test-db";
-import { ciroEtkileri, ciroKontrol } from "@/lib/domain/cek-senet";
+import { ciroHedefEtkisi, ciroKontrol } from "@/lib/domain/cek-senet";
 import {
   cariBakiyesiniDogrula,
   cariOlustur,
@@ -63,22 +63,13 @@ describe("ciroKontrol", () => {
   });
 });
 
-describe("ciroEtkileri", () => {
-  it("iki tarafa zıt işaretli, eşit büyüklükte etki üretir", () => {
-    const e = ciroEtkileri("10000");
-    // Çeki veren müşterinin borcu kapanır → bakiyesi düşer.
-    expect(e.verenCari).toBe("-10000");
-    // Çeki devrettiğimiz tedarikçiye borcumuz azalır → bakiyesi yükselir.
-    expect(e.alanCari).toBe("10000");
-  });
-
-  it("etkilerin toplamı sıfırdır — değer sistemden çıkmaz, taraf değiştirir", () => {
-    const e = ciroEtkileri("1234.56");
-    expect(Number(e.verenCari) + Number(e.alanCari)).toBe(0);
+describe("ciroHedefEtkisi", () => {
+  it("çeki devrettiğimiz tedarikçiye borcumuz azalır → bakiyesi yükselir", () => {
+    expect(ciroHedefEtkisi("10000")).toBe("10000");
   });
 
   it("kuruşa yuvarlar", () => {
-    expect(ciroEtkileri("1000.005").alanCari).toBe("1000.01");
+    expect(ciroHedefEtkisi("1000.005")).toBe("1000.01");
   });
 });
 
@@ -145,12 +136,14 @@ describe("Ciro — uçtan uca", () => {
       },
       db.prisma
     );
-    // Çek kaydı tek başına hiçbir bakiyeyi değiştirmez.
-    expect((await getCari(ahmet.id, db.prisma))?.bakiye).toBe("10000");
+    // Çeki almak Ahmet'in hesabını ZATEN kapatır — ciroyu beklemez.
+    expect((await getCari(ahmet.id, db.prisma))?.bakiye).toBe("0");
+    // Mehmet'e borcumuz henüz duruyor.
+    expect((await getCari(mehmet.id, db.prisma))?.bakiye).toBe("-10000");
 
     await ciroEt(cek.id, mehmet.id, gun(5), db.prisma);
 
-    // Ciro sonrası iki hesap da kapanmalı.
+    // Ciro yalnızca HEDEF tarafı etkiler; Ahmet zaten kapalıydı.
     expect((await getCari(ahmet.id, db.prisma))?.bakiye).toBe("0");
     expect((await getCari(mehmet.id, db.prisma))?.bakiye).toBe("0");
 
@@ -180,13 +173,17 @@ describe("Ciro — uçtan uca", () => {
       db.prisma
     );
 
+    // Çek alındığı anda müşterinin borcu kapandı.
+    expect((await getCari(musteri.id, db.prisma))?.bakiye).toBe("0");
+
     await ciroEt(cek.id, tedarikci.id, gun(5), db.prisma);
     expect((await getCari(musteri.id, db.prisma))?.bakiye).toBe("0");
     expect((await getCari(tedarikci.id, db.prisma))?.bakiye).toBe("0");
 
     await ciroGeriAl(cek.id, db.prisma);
 
-    expect((await getCari(musteri.id, db.prisma))?.bakiye).toBe("5000");
+    // Çek portföye döner: müşteri hâlâ kapalı, tedarikçiye borç geri gelir.
+    expect((await getCari(musteri.id, db.prisma))?.bakiye).toBe("0");
     expect((await getCari(tedarikci.id, db.prisma))?.bakiye).toBe("-5000");
 
     const kayit = await getCekSenet(cek.id, db.prisma);
@@ -227,8 +224,9 @@ describe("Ciro — uçtan uca", () => {
       /kısmen tahsil/i
     );
     // Reddedilen ciro hiçbir yan etki bırakmamalı.
-    expect((await getCari(m.id, db.prisma))?.bakiye).toBe("4000");
+    expect((await getCari(m.id, db.prisma))?.bakiye).toBe("0");
     expect((await getCari(t.id, db.prisma))?.bakiye).toBe("0");
+    expect((await getCekSenet(cek.id, db.prisma))?.durum).toBe("PORTFOYDE");
   });
 
   it("verilen çek ciro edilemez", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cariEtkisi,
+  cekCariEtkisi,
   durumDegisikligiKontrol,
   hesaplaPortfoyOzeti,
   hesaplaTahsilat,
@@ -182,30 +182,42 @@ describe("durumDegisikligiKontrol — elle işaretleme", () => {
   });
 });
 
-describe("cariEtkisi — cari bakiyeye yansıma", () => {
-  it("alınan çek tahsil edilince carinin borcu azalır (bakiye düşer)", () => {
-    expect(cariEtkisi("ALINAN", "3000")).toBe("-3000");
+describe("cekCariEtkisi — cari bakiyeye yansıma", () => {
+  it("alınan çek ALINDIĞI ANDA carinin borcunu kapatır (bakiye düşer)", () => {
+    expect(cekCariEtkisi("ALINAN", "PORTFOYDE", "3000", "0")).toBe("-3000");
   });
 
-  it("verilen çek ödenince bizim borcumuz azalır (bakiye yükselir)", () => {
-    expect(cariEtkisi("VERILEN", "3000")).toBe("3000");
+  it("verilen çek VERİLDİĞİ ANDA bizim borcumuzu kapatır (bakiye yükselir)", () => {
+    expect(cekCariEtkisi("VERILEN", "PORTFOYDE", "3000", "0")).toBe("3000");
+  });
+
+  it("tahsilat etkiyi DEĞİŞTİRMEZ — borç zaten kapanmıştı", () => {
+    // Çift sayımın kaynağı buydu: hem çek kaydı hem tahsilat sayılıyordu.
+    expect(cekCariEtkisi("ALINAN", "PORTFOYDE", "3000", "0")).toBe(
+      cekCariEtkisi("ALINAN", "PORTFOYDE", "3000", "1500")
+    );
+    expect(cekCariEtkisi("ALINAN", "TAHSIL_EDILDI", "3000", "3000")).toBe("-3000");
+  });
+
+  it("karşılıksız çekte borç geri gelir — etki yalnızca tahsil edilen kadardır", () => {
+    expect(cekCariEtkisi("ALINAN", "KARSILIKSIZ", "3000", "0")).toBe("0");
+    expect(cekCariEtkisi("ALINAN", "KARSILIKSIZ", "3000", "1000")).toBe("-1000");
+    expect(cekCariEtkisi("VERILEN", "KARSILIKSIZ", "3000", "1000")).toBe("1000");
+  });
+
+  it("ciro edilen çekte veren tarafın etkisi korunur", () => {
+    // Müşterinin borcu çeki verdiği anda kapandı; çekin sonradan devredilmesi
+    // onu ilgilendirmez.
+    expect(cekCariEtkisi("ALINAN", "CIRO_EDILDI", "3000", "0")).toBe("-3000");
   });
 
   it("kuruşa yuvarlar", () => {
-    expect(cariEtkisi("ALINAN", "3000.005")).toBe("-3000.01");
+    expect(cekCariEtkisi("ALINAN", "PORTFOYDE", "3000.005", "0")).toBe("-3000.01");
   });
 
-  it("tahsilat geri alınınca ters etki uygulanır", () => {
-    const etki = cariEtkisi("ALINAN", "3000");
+  it("etki geri alınırken ters işaret uygulanır", () => {
+    const etki = cekCariEtkisi("ALINAN", "PORTFOYDE", "3000", "0");
     expect(tersEtki(etki)).toBe("3000");
-  });
-
-  it("birden fazla kısmi tahsilatın toplam etkisi tam tahsilata eşittir", () => {
-    const parcali = ["2500", "3000.25", "4499.75"].map((t) =>
-      Number(cariEtkisi("ALINAN", t))
-    );
-    const toplam = parcali.reduce((a, b) => a + b, 0);
-    expect(toplam).toBeCloseTo(Number(cariEtkisi("ALINAN", "10000")), 2);
   });
 });
 

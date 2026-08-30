@@ -44,11 +44,12 @@ async function cekEkle(
 }
 
 describe("Çek/senet kaydı", () => {
-  it("kayıt cari bakiyesini DEĞİŞTİRMEZ — borç tahsil edildikçe kapanır", async () => {
+  it("kaydın kendisi borcu kapatır — çek ele geçtiği anda", async () => {
+    // 10.000 borçlu müşteri 5.000'lik çek veriyor → 5.000 borçlu kalır.
     const cari = await cariEkle("Kayıt Carisi", "10000");
     await cekEkle(cari.id, "5000");
 
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("10000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("5000");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 
@@ -68,6 +69,9 @@ describe("Tam tahsilat", () => {
     const cari = await cariEkle("Tam Tahsilat", "12000");
     const cek = await cekEkle(cari.id, "12000");
 
+    // Borç çek alındığı anda kapandı; tahsilat cariye DOKUNMAZ.
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
+
     await tahsilatEkle(cek.id, { tutar: "12000", tarih: gun(5) }, db.prisma);
 
     const kayit = await getCekSenet(cek.id, db.prisma);
@@ -75,7 +79,6 @@ describe("Tam tahsilat", () => {
     expect(kayit?.tahsilEdilen).toBe("12000");
     expect(kayit?.kalan).toBe("0");
 
-    // Alınan çek tahsil edilince carinin borcu kapanır.
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
     expect((await cekSenetiDogrula(cek.id, db.prisma)).mutabik).toBe(true);
@@ -83,9 +86,10 @@ describe("Tam tahsilat", () => {
 });
 
 describe("Kısmi tahsilat", () => {
-  it("kısmi tahsilatta durum PORTFOYDE kalır, bakiye kısmen düşer", async () => {
+  it("kısmi tahsilat durumu PORTFOYDE bırakır, cari bakiyesine DOKUNMAZ", async () => {
     const cari = await cariEkle("Kısmi Tahsilat", "10000");
     const cek = await cekEkle(cari.id, "10000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
     await tahsilatEkle(cek.id, { tutar: "3500.50", tarih: gun(5) }, db.prisma);
 
@@ -94,7 +98,8 @@ describe("Kısmi tahsilat", () => {
     expect(kayit?.tahsilEdilen).toBe("3500.5");
     expect(kayit?.kalan).toBe("6499.5");
 
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("6499.5");
+    // Tahsilat kasa/portföy hareketidir; cari hesap çek alınınca kapanmıştı.
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 
@@ -111,7 +116,7 @@ describe("Kısmi tahsilat", () => {
     const kayit = await getCekSenet(cek.id, db.prisma);
     expect(kayit?.tahsilEdilen).toBe("4000");
     expect(kayit?.tahsilatlar).toHaveLength(1);
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("6000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 });
@@ -123,11 +128,11 @@ describe("Birden fazla kısmi tahsilat", () => {
 
     await tahsilatEkle(cek.id, { tutar: "2500", tarih: gun(5) }, db.prisma);
     expect((await getCekSenet(cek.id, db.prisma))?.durum).toBe("PORTFOYDE");
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("7500");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
     await tahsilatEkle(cek.id, { tutar: "3000.25", tarih: gun(10) }, db.prisma);
     expect((await getCekSenet(cek.id, db.prisma))?.durum).toBe("PORTFOYDE");
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("4499.75");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
     await tahsilatEkle(cek.id, { tutar: "4499.75", tarih: gun(15) }, db.prisma);
 
@@ -160,12 +165,15 @@ describe("Birden fazla kısmi tahsilat", () => {
 });
 
 describe("Verilen çek — ters yön", () => {
-  it("verilen çek ödenince bizim borcumuz azalır (bakiye yükselir)", async () => {
+  it("verilen çek VERİLDİĞİ ANDA bizim borcumuzu kapatır", async () => {
+    // 8.000 borçlu olduğumuz tedarikçiye 8.000'lik çek veriyoruz.
     const cari = await cariEkle("Tedarikçi", "-8000");
     const cek = await cekEkle(cari.id, "8000", "VERILEN");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
+    // Çekin bankadan ödenmesi cari hesabı bir daha etkilemez.
     await tahsilatEkle(cek.id, { tutar: "3000", tarih: gun(5) }, db.prisma);
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("-5000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
     await tahsilatEkle(cek.id, { tutar: "5000", tarih: gun(10) }, db.prisma);
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
@@ -189,7 +197,8 @@ describe("Tahsilat geri alma", () => {
     expect(kayit?.tahsilEdilen).toBe("6000");
     // Tamamlanmış kayıt, tahsilat geri alınınca portföye döner.
     expect(kayit?.durum).toBe("PORTFOYDE");
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("4000");
+    // Cari bakiyesi etkilenmez: çek hâlâ elimizde, borç kapalı.
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 
@@ -205,7 +214,8 @@ describe("Tahsilat geri alma", () => {
     for (const id of idler) await tahsilatSil(id, db.prisma);
 
     expect((await getCekSenet(cek.id, db.prisma))?.tahsilEdilen).toBe("0");
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("10000");
+    // Çek kaydı duruyor → borç kapalı kalır.
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
 });
@@ -215,6 +225,9 @@ describe("Durum değişiklikleri", () => {
     const cari = await cariEkle("Karşılıksız", "5000");
     const cek = await cekEkle(cari.id, "5000");
 
+    // Çek alınınca borç kapanmıştı.
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
+
     await durumDegistir(cek.id, "KARSILIKSIZ", db.prisma);
     expect((await getCekSenet(cek.id, db.prisma))?.durum).toBe("KARSILIKSIZ");
 
@@ -222,8 +235,7 @@ describe("Durum değişiklikleri", () => {
       tahsilatEkle(cek.id, { tutar: "100", tarih: gun(5) }, db.prisma)
     ).rejects.toThrow();
 
-    // Karşılıksız çekte borç açık kalır — hiç tahsilat olmadığı için
-    // bakiyede düzeltme gerekmez.
+    // Çek yandı → müşterinin borcu GERİ GELİR.
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("5000");
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
   });
@@ -301,7 +313,7 @@ describe("Çek/senet güncelleme ve silme", () => {
     const cek = await cekEkle(cari.id, "10000");
     await tahsilatEkle(cek.id, { tutar: "2500", tarih: gun(5) }, db.prisma);
     await tahsilatEkle(cek.id, { tutar: "1500", tarih: gun(6) }, db.prisma);
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("6000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
     await cekSenetSil(cek.id, db.prisma);
 
@@ -329,12 +341,13 @@ describe("Uçtan uca: satış → çek → kısmi tahsilatlar", () => {
     );
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("12000");
 
-    // Müşteri 12.000'lik çek veriyor — borç henüz kapanmaz.
+    // Müşteri 12.000'lik çek veriyor — cari hesap BURADA kapanır.
     const cek = await cekEkle(cari.id, "12000");
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("12000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
+    // Tahsilatlar parayı kasaya alır, cari hesabı bir daha etkilemez.
     await tahsilatEkle(cek.id, { tutar: "5000", tarih: gun(10) }, db.prisma);
-    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("7000");
+    expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
     await tahsilatEkle(cek.id, { tutar: "7000", tarih: gun(20) }, db.prisma);
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");

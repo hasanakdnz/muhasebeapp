@@ -32,6 +32,7 @@ npm run dev
 | `npm test` | Vitest test suite |
 | `npm run db:migrate` | Şema değişikliklerini uygular |
 | `npm run db:seed` | Geliştirme verisini yükler |
+| `npm run db:bakiye-yenile` | Cari bakiyelerini kaynak kayıtlardan yeniden hesaplar |
 | `npm run db:studio` | Prisma Studio |
 
 ## Raporlar ve dışa aktarım
@@ -154,29 +155,52 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   `acilisBakiyesi + Σ(işlem etkisi)` değerine eşittir. Elle düzenlenmez; açılış
   bakiyesi değişirse yeniden hesaplanır. `cariBakiyesiniDogrula()` mutabakatı ölçer.
   Satış bakiyeyi artırır (cari size borçlanır), alış azaltır.
-- **Çek/senet ve kısmi tahsilat:** Kayıt cari bakiyesini DEĞİŞTİRMEZ; borç para
-  fiilen tahsil edildikçe kapanır. Böylece karşılıksız çıkan çekte düzeltme
-  gerekmez — borç zaten azalmamıştır. `ALINAN` tahsil edilince cari bakiyesi
-  düşer, `VERILEN` ödenince yükselir. Her tahsilat ayrı kayıttır ve
-  `tahsilEdilen = Σ tahsilat` değişmezi `cekSenetiDogrula()` ile ölçülür.
-  Kalandan fazla tahsilat engellenir. Şemada "kısmi tahsil" durumu olmadığı için
-  kısmen tahsil edilmiş kayıt PORTFOYDE kalır; tutar tamamlanınca otomatik
-  TAHSIL_EDILDI olur. `TAHSIL_EDILDI` elle seçilemez.
-- **Ciro:** Alınan çek bir tedarikçiye devredilebilir. Ciro İKİ cari bakiyesini
-  birden etkiler — çeki veren müşterinin borcu kapanır, çekin devredildiği
-  cariye olan borcumuz aynı tutarda azalır. Bu yüzden hedef cari zorunludur ve
-  ciro düz bir durum değişikliği değil, ayrı bir işlemdir (`ciroEt` /
-  `ciroGeriAl`). Yalnızca portföydeki, hiç tahsil edilmemiş ALINAN çek ciro edilebilir.
+- **Çek/senet — bakiye ÇEK ALINDIĞI ANDA işlenir:** Türkiye'deki standart
+  uygulama (`101 Alınan Çekler / 120 Alıcılar`): müşteri borcuna karşılık çeki
+  verdiğinde cari hesabı KAPANIR, risk çek portföyüne taşınır. `ALINAN` çek
+  bakiyeyi düşürür, `VERILEN` çek yükseltir. **Tahsilat cari bakiyesine
+  DOKUNMAZ** — o borç çek ele geçtiğinde zaten kapanmıştı; tahsilat parayı
+  portföyden kasaya alan ayrı bir olaydır.
+
+  Karşılıksız (`KARSILIKSIZ`) çıkan çekte borç GERİ GELİR: net etki yalnızca
+  fiilen tahsil edilen kadardır. Kısmen tahsil edilip sonra yanan çekte de
+  doğru sonucu verir — tahsil edilemeyen kısım borç olarak döner. Kayıt
+  `PORTFOYDE`'ye geri alınırsa borç yeniden kapanır.
+
+  > **Neden değişti.** Önceki sürümde etki tahsilat anında işleniyordu. O model
+  > karşılıksız çekte düzeltme gerektirmemesi için seçilmişti, ama nadir durumu
+  > kolaylaştırırken sık durumu bozuyordu: müşterinin çekle kapanmış borcu hem
+  > cari alacağında hem çek portföyünde görünüyor, alacak ÇİFT SAYILIYORDU
+  > (10.000'lik alacak panoda 20.000 çıkıyordu). Regresyon testleri
+  > `tests/cek-cift-sayim.test.ts` içinde.
+
+  Her tahsilat ayrı kayıttır ve `tahsilEdilen = Σ tahsilat` değişmezi
+  `cekSenetiDogrula()` ile ölçülür. Kalandan fazla tahsilat engellenir. Şemada
+  "kısmi tahsil" durumu olmadığı için kısmen tahsil edilmiş kayıt PORTFOYDE
+  kalır; tutar tamamlanınca otomatik TAHSIL_EDILDI olur. `TAHSIL_EDILDI` elle
+  seçilemez.
+- **Ciro:** Alınan çek bir tedarikçiye devredilebilir. Ciro yalnızca HEDEF
+  cariyi etkiler: ona olan borcumuz çekin tutarı kadar azalır. Çeki bize veren
+  müşterinin bakiyesi ciroda DEĞİŞMEZ — onun borcu çeki verdiği anda zaten
+  kapanmıştı. Hedef cari zorunludur ve ciro düz bir durum değişikliği değil,
+  ayrı bir işlemdir (`ciroEt` / `ciroGeriAl`). Yalnızca portföydeki, hiç tahsil
+  edilmemiş ALINAN çek ciro edilebilir.
 - **Fatura ödemeleri ve ÇİFT SAYIM koruması:** `Islem.odenenTutar` = Σ IslemOdeme
   ve `status` bundan türetilir. Ödemenin cari bakiyesine etkisi KAYNAĞINA bağlıdır:
   `DIREKT` (nakit/banka) bakiyeyi düşürür; `CEK_TAHSILATI` kaynaklı ödeme
-  bakiyeyi ETKİLEMEZ — o para çek tahsilatı kaydedilirken zaten düşülmüştür,
-  tekrar düşülseydi çekle ödenen fatura bakiyeyi iki kez azaltırdı. Bir tahsilat
+  bakiyeyi ETKİLEMEZ — o borç çek alındığında zaten kapanmıştı, tekrar
+  düşülseydi çekle ödenen fatura bakiyeyi iki kez azaltırdı. Bir tahsilat
   birden fazla faturaya bölüştürülebilir; dağıtılan toplam tahsilat tutarını aşamaz.
-- **Cari bakiyesinin dört kaynağı vardır:** satış/alış işlemleri ve çek/senet
-  tahsilatları, ciro edilen çekler (hem veren hem alan tarafta) ve DİREKT fatura
-  ödemeleri. Mutabakat dördünü birden sayar — yeni bir kaynak eklenirse
-  `cariEtkileri()` güncellenmeli.
+- **Cari bakiyesinin dört kaynağı vardır:** satış/alış işlemleri, bu cariye ait
+  çek/senet KAYITLARI, bu cariye ciro edilmiş çekler ve DİREKT fatura ödemeleri.
+  Mutabakat dördünü birden sayar — yeni bir kaynak eklenirse `cariEtkileri()`
+  güncellenmeli. Çek tarafındaki her mutasyon bakiyeyi artımlı aritmetikle
+  değil `cariBakiyesiniYenile()` ile KAYNAKLARDAN yeniden hesaplar; böylece
+  mutabakat fonksiyonuyla aynı kaynağı kullanır ve ikisi tanım gereği ayrışamaz.
+
+  Bakiye kuralı değişirse mevcut kayıtlar eski kurala göre hesaplanmış kalır;
+  `npm run db:bakiye-yenile` hepsini yeniden hesaplar ve sonucu mutabakatla
+  doğrular. Kaynak kayıtlara dokunmaz, tekrar çalıştırmak zararsızdır.
 - **Gider ve KDV:** `Gider.tutar` KDV DAHİL toplamdır (fişin üzerindeki rakam);
   KDV bu tutarın İÇİNDEN ayrılır (`tutar × oran / (100 + oran)`). Satış tarafında
   KDV matrahın ÜSTÜNE eklenir — ikisi birbirinin tersidir ve testle sabitlenmiştir.
