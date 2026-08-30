@@ -15,6 +15,15 @@ export const authConfig = {
   session: {
     // Credentials provider veritabanı oturumlarını desteklemez → JWT.
     strategy: "jwt",
+    /**
+     * 12 saat. Varsayılan 30 GÜNDÜR; muhasebe verisine erişen bir oturumun
+     * bir ay boyunca açık kalması, çalınan ya da ortak bilgisayarda unutulan
+     * bir çerezi aynı süre kullanılabilir kılar. Bir iş gününü kapsayacak
+     * kadar uzun, bir gecede biteceği kadar kısa.
+     */
+    maxAge: 12 * 60 * 60,
+    // Etkin kullanımda token yenilensin; çalışırken oturum düşmesin.
+    updateAge: 60 * 60,
   },
   callbacks: {
     authorized({ auth, request }) {

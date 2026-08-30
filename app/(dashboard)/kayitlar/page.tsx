@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { requireAdminSayfa } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,10 @@ export default async function KayitlarPage({
 }: {
   searchParams: Promise<{ aksiyon?: string }>;
 }) {
+  // middleware JWT'ye bakar; JWT giriş anındaki rolü taşır. Yetki burada
+  // veritabanından kesinleştirilir (bkz. lib/auth-guards.ts).
+  await requireAdminSayfa();
+
   const sp = await searchParams;
   const aksiyon = AUDIT_AKSIYONLARI.includes(sp.aksiyon as AuditAksiyonu)
     ? (sp.aksiyon as AuditAksiyonu)

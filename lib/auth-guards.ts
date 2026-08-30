@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/generated/prisma/enums";
 
 export type SessionUser = {
@@ -11,13 +13,36 @@ export type SessionUser = {
 /**
  * Server action'lar dışarıdan çağrılabilen uç noktalardır — middleware'in
  * sayfayı koruması yeterli değildir, her action kendi yetkisini doğrular.
+ *
+ * ## Yetki neden VERİTABANINDAN okunur
+ * Oturum JWT'dir ve `id` ile `role` alanlarını GİRİŞ ANINDAKİ hâliyle taşır.
+ * Token'ın kendisi imzalıdır, ama içeriği zamanla gerçeklikten kopar:
+ *
+ *  - Kullanıcı silinirse token süresi dolana kadar geçerli kalır.
+ *  - Yönetici, personele düşürülürse eski token ADMIN demeye devam eder ve
+ *    kişi silme gibi yönetici işlemlerini yapmayı sürdürür.
+ *
+ * Bu yüzden her yetki kontrolü kullanıcıyı birincil anahtarla yeniden okur.
+ * Maliyeti tek bir indeksli sorgudur; karşılığında yetki değişikliği ANINDA
+ * geçerli olur.
  */
 export async function requireUser(): Promise<SessionUser> {
   const session = await auth();
   if (!session?.user?.id) {
     throw new Error("Bu işlem için oturum açmanız gerekiyor.");
   }
-  return session.user;
+
+  const guncel = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, name: true, email: true },
+  });
+  if (!guncel) {
+    throw new Error(
+      "Hesabınız artık geçerli değil. Lütfen yeniden giriş yapın."
+    );
+  }
+
+  return guncel;
 }
 
 export async function requireAdmin(): Promise<SessionUser> {
@@ -44,8 +69,40 @@ export async function adminVeyaHata(): Promise<
   return { ok: true, user };
 }
 
+/**
+ * Oturumu açık kullanıcı — yoksa veya artık veritabanında yoksa null.
+ * Sayfa katmanı bunu kullanır; action katmanı `requireUser` ile hata fırlatır.
+ */
+export async function gecerliKullanici(): Promise<SessionUser | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+
+  return prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, name: true, email: true },
+  });
+}
+
 /** Sayfaların yönetici-özel UI'ı gizlemesi için. */
 export async function isAdmin(): Promise<boolean> {
-  const session = await auth();
-  return session?.user?.role === "ADMIN";
+  const user = await gecerliKullanici();
+  return user?.role === "ADMIN";
+}
+
+/**
+ * Yönetici sayfaları için kapı.
+ *
+ * middleware yalnızca JWT'deki role bakar ve JWT giriş anındaki rolü taşır;
+ * yetkisi düşürülen kullanıcı eski token'ıyla yönetici sayfasını doğrudan
+ * AÇABİLİYORDU (ölçüldü: /kayitlar ve /ayarlar 200 dönüyordu). Sayfa da
+ * rolü veritabanından doğrular.
+ *
+ * middleware kaldırılmadı: o, oturumsuz isteği ucuza eler; bu ise yetkiyi
+ * kesinleştirir.
+ */
+export async function requireAdminSayfa(): Promise<SessionUser> {
+  const kullanici = await gecerliKullanici();
+  if (!kullanici) redirect("/login");
+  if (kullanici.role !== "ADMIN") redirect("/dashboard");
+  return kullanici;
 }

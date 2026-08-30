@@ -115,6 +115,54 @@ action ayrıca `adminVeyaHata()` ile doğrular. Guard hata FIRLATMAZ, action
 sözleşmesine uyan bir sonuç döner; aksi halde personel silme düğmesine basınca
 çökme ekranı görürdü.
 
+## Güvenlik
+
+Bulunan ve kapatılan açıklar (hepsi `tests/guvenlik.test.ts` ile sabitlendi):
+
+- **Yetki JWT'den değil VERİTABANINDAN okunur.** Oturum JWT'dir ve `role`
+  alanını giriş anındaki hâliyle taşır. Yöneticiden personele düşürülen bir
+  kullanıcı eski token'ıyla yönetici işlemlerini sürdürebiliyor, silinen
+  kullanıcının oturumu geçerli kalıyordu. Artık her yetki kontrolü kullanıcıyı
+  birincil anahtarla yeniden okur (`lib/auth-guards.ts`).
+
+  Yönetici SAYFALARI da kendi kapısını çalar (`requireAdminSayfa`): middleware
+  Edge'de çalıştığı için veritabanına bakamaz ve yalnızca JWT'ye güvenir —
+  ölçüldü, düşürülmüş kullanıcı `/kayitlar` ve `/ayarlar` sayfalarını doğrudan
+  açabiliyordu. Bir yönetici sayfası eklenip kapı unutulursa test kırılır.
+
+- **Kullanıcı sayımı (enumeration).** `authorize`, kullanıcı bulunamayınca
+  bcrypt'i hiç çalıştırmadan dönüyordu; kayıtlı e-posta ~200ms, kayıtsız ~0ms
+  sürüyordu ve saldırgan hangi adreslerin kayıtlı olduğunu yanıt süresinden
+  okuyabiliyordu. Artık kullanıcı yokken de sahte bir hash'e karşı gerçek bir
+  doğrulama yapılır (`SAHTE_HASH`). Ölçüm: düzeltmeden sonra kayıtlı 251ms,
+  kayıtsız 298ms — fark gürültü ve yönü rastgele.
+
+- **Giriş deneme sınırı.** Sınırsız parola denemesi mümkündü. 15 dakikalık
+  pencerede 5 başarısız denemeden sonra 15 dakika kilit uygulanır; sayaç hem
+  e-posta hem IP için tutulur (biri tek başına atlatılabilirdi) ve kilitliyken
+  yapılan deneme süreyi uzatır. Ölçüm: 6. denemeden itibaren istek bcrypt'e
+  hiç girmeden ~15ms'de reddediliyor.
+
+  > **Bilinen sınır:** sayaç süreç belleğindedir, tek süreçlik bu kurulum için
+  > doğrudur. Çok örnekli bir dağıtımda paylaşılan bir depoya taşınmalıdır —
+  > değişecek tek yer `lib/giris-limiti.ts`.
+
+- **Oturum ömrü** 30 günden 12 saate indirildi (etkin kullanımda yenilenir).
+  Muhasebe verisine erişen bir çerezin bir ay boyunca geçerli kalması,
+  çalınan ya da ortak bilgisayarda unutulan oturumu aynı süre kullanılabilir
+  kılıyordu.
+
+- **Güvenlik başlıkları** eklendi (`next.config.ts`): `frame-ancestors 'none'`
+  + `X-Frame-Options: DENY` (clickjacking — görünmez bir iframe'de yöneticiye
+  "Sil" tıklatılabilirdi ve silme geri alınamaz), `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy`.
+
+Temiz çıkanlar: ham SQL yok (Prisma parametreler), `dangerouslySetInnerHTML`
+yok, `eval` yok, `.env` git dışı, hata mesajları izin listesinden geçer (yığın
+izi sızmaz), cron uç noktası `timingSafeEqual` ile korunur ve sır tanımsızsa
+kapalı başarısız olur, belge servisi oturum + anahtar kalıbı + sahiplik
+kontrolü + katı CSP uygular.
+
 ## Vade bildirimi (cron)
 
 Vadesi geçen/yaklaşan çek-senetleri yöneticilere bildiren job dış bir

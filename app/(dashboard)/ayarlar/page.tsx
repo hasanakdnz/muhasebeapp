@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdminSayfa } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { FirmaForm } from "@/components/ayarlar/firma-form";
 import { firmaGetir } from "@/lib/firma";
@@ -11,6 +12,10 @@ export const metadata: Metadata = { title: "Ayarlar · Muhasebe" };
  * Buradaki bilgiler proforma/teklif çıktısının başlığını oluşturur.
  */
 export default async function Page() {
+  // middleware JWT'ye bakar; JWT giriş anındaki rolü taşır. Yetki burada
+  // veritabanından kesinleştirilir (bkz. lib/auth-guards.ts).
+  await requireAdminSayfa();
+
   const firma = await firmaGetir();
 
   return (
