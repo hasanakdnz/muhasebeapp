@@ -15,6 +15,8 @@ export const cekSenetSchema = z.object({
   yon: z.enum(CEK_SENET_YONLERI, { message: "Yön seçin." }),
   cariId: z.string().trim().min(1, "Cari seçin."),
   tutar: tutarAlani({ zorunlu: true, pozitif: true, label: "Tutar" }),
+  /** Çekin ALINDIĞI / VERİLDİĞİ tarih — cari bakiyesi bu anda değişir. */
+  tarih: tarihAlani,
   vadeTarihi: tarihAlani,
   aciklama: optionalText(200, "Açıklama"),
 });
@@ -27,6 +29,7 @@ export const cekSenetFormDefaults: CekSenetInput = {
   yon: "ALINAN",
   cariId: "",
   tutar: "",
+  tarih: "",
   vadeTarihi: "",
   aciklama: "",
 };

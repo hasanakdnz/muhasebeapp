@@ -191,6 +191,28 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   bakiyeyi ETKİLEMEZ — o borç çek alındığında zaten kapanmıştı, tekrar
   düşülseydi çekle ödenen fatura bakiyeyi iki kez azaltırdı. Bir tahsilat
   birden fazla faturaya bölüştürülebilir; dağıtılan toplam tahsilat tutarını aşamaz.
+- **Cari ekstresi:** Cari kartı bakiyeyi oluşturan HER hareketi kronolojik ve
+  yürüyen bakiyeyle gösterir (`cariEkstresiGetir`). Ekstre ile bakiye AYNI
+  kaynaktan (`cariHareketleri`) türer — iki ayrı sorgu olsaydı biri güncellenip
+  diğeri unutulduğunda sessizce ayrışırlardı. Ekstrenin son yürüyen bakiyesi
+  saklanan bakiyeyle tutmazsa ekranda uyarı basılır (`ekstreMutabik`).
+  Karşılıksız çek ekstrede İKİ satırdır — "çek alındı" (tam tutar) ve
+  "karşılıksız çıktı" (tahsil edilemeyen kısım geri döner); tek satırlık net
+  etki olan biteni anlatmazdı. CSV olarak indirilebilir.
+- **Çekin ALINMA tarihi ayrı bir alandır** (`CekSenet.tarih`), vade değil: cari
+  bakiyesi o anda değiştiği için ekstre buna göre sıralanır. Kayıt zamanı
+  (`createdAt`) kullanılsaydı geriye dönük girilen çek ekstrede giriş gününe
+  düşerdi. Aynı gerekçeyle karşılıksız işaretleme tarihi de saklanır
+  (`karsiliksizTarihi`); `updatedAt` kullanılsaydı çekin herhangi bir alanı
+  düzenlendiğinde ekstredeki geri dönüş satırı yer değiştirirdi.
+
+  > **Bilinen sınır.** Çek bir faturayı kapatsa da fatura kaydı "bekliyor"
+  > kalır: cari hesap (hesap düzeyi) ile fatura ödeme durumu (belge düzeyi)
+  > yalnızca `IslemOdeme` üzerinden bağlanır ve çek böyle bir kayıt üretmez.
+  > Sonuç: yaşlandırma raporu, çekle kapanmış bir faturayı hâlâ açık gösterir.
+  > Bu, çek modelinden önce de vardı (tahsilat anında aynı ayrışma oluşuyordu).
+  > Doğru çözüm, fatura ödemesine `CEK` kaynağı eklemektir.
+
 - **Cari bakiyesinin dört kaynağı vardır:** satış/alış işlemleri, bu cariye ait
   çek/senet KAYITLARI, bu cariye ciro edilmiş çekler ve DİREKT fatura ödemeleri.
   Mutabakat dördünü birden sayar — yeni bir kaynak eklenirse `cariEtkileri()`

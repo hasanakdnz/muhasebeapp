@@ -41,6 +41,9 @@ export default async function YeniCekSenetPage() {
         cariler={cariler.map((c) => ({ id: c.id, unvan: c.unvan }))}
         defaultValues={{
           ...cekSenetFormDefaults,
+          // Tarih sunucuda üretilir; client'ta üretilseydi saat dilimi farkı
+          // hydration uyuşmazlığı yaratabilirdi.
+          tarih: toDateInputValue(new Date()),
           vadeTarihi: toDateInputValue(new Date()),
         }}
         onSubmitAction={createCekSenet}

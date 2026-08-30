@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { cariEkstresiGetir, getCari } from "@/lib/cari";
+import { CARI_HAREKET_ETIKETI } from "@/lib/domain/cari-ekstre";
 import { csvIndirmeBasliklari, csvOlustur, csvTarih, csvTutar } from "@/lib/csv";
 import { formatYuzde } from "@/lib/money";
 import { formatTarih } from "@/lib/date";
@@ -21,7 +23,7 @@ import {
  * Raporlar finansal veridir; middleware bu yolu zaten koruyor, burada ikinci
  * kez doğrulanıyor — tek bir yapılandırma hatası raporları açığa çıkarmamalı.
  */
-const TURLER = ["kdv", "yaslandirma", "ekstre", "satis"] as const;
+const TURLER = ["kdv", "yaslandirma", "ekstre", "satis", "cari-ekstre"] as const;
 type RaporTuru = (typeof TURLER)[number];
 
 export async function GET(
@@ -92,6 +94,64 @@ export async function GET(
     return new NextResponse(csv, {
       headers: csvIndirmeBasliklari(
         `yaslandirma-${ek}_${formatTarih(bugun).replace(/\./g, "-")}.csv`
+      ),
+    });
+  }
+
+  if (tur === "cari-ekstre") {
+    // Cari ekstresi dönem filtresi almaz: bakiyenin tamamı gösterilmeli,
+    // aksi halde yürüyen bakiye dönemin ortasından başlar ve anlamsızlaşır.
+    const cariId = url.searchParams.get("cari");
+    if (!cariId) return new NextResponse("Cari seçilmedi.", { status: 400 });
+
+    const [cari, ekstre] = await Promise.all([
+      getCari(cariId),
+      cariEkstresiGetir(cariId),
+    ]);
+    if (!cari || !ekstre) {
+      return new NextResponse("Cari bulunamadı.", { status: 404 });
+    }
+
+    type Satir = {
+      tarih: string;
+      hareket: string;
+      aciklama: string;
+      tutar: string;
+      bakiye: string;
+    };
+
+    const satirlar: Satir[] = [
+      {
+        tarih: "",
+        hareket: CARI_HAREKET_ETIKETI.ACILIS,
+        aciklama: "",
+        tutar: "",
+        bakiye: csvTutar(ekstre.acilisBakiyesi),
+      },
+      ...ekstre.satirlar.map((h) => ({
+        tarih: csvTarih(h.tarih),
+        hareket: CARI_HAREKET_ETIKETI[h.tur],
+        aciklama: h.aciklama ?? "",
+        tutar: csvTutar(h.etki),
+        bakiye: csvTutar(h.yurutulenBakiye),
+      })),
+    ];
+
+    const csv = csvOlustur(
+      [
+        { baslik: "Tarih", deger: (s: Satir) => s.tarih },
+        { baslik: "Hareket", deger: (s: Satir) => s.hareket },
+        { baslik: "Açıklama", deger: (s: Satir) => s.aciklama },
+        { baslik: "Tutar", deger: (s: Satir) => s.tutar },
+        { baslik: "Bakiye", deger: (s: Satir) => s.bakiye },
+      ],
+      satirlar
+    );
+
+    const adEki = cari.unvan.replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 40);
+    return new NextResponse(csv, {
+      headers: csvIndirmeBasliklari(
+        `cari-ekstre-${adEki}_${formatTarih(new Date()).replace(/\./g, "-")}.csv`
       ),
     });
   }

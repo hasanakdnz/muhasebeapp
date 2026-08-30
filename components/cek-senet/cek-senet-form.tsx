@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -41,12 +41,16 @@ export function CekSenetForm({
     register,
     handleSubmit,
     getValues,
+    control,
     setError,
     formState: { errors },
   } = useForm<CekSenetInput, unknown, CekSenetOutput>({
     resolver: zodResolver(cekSenetSchema),
     defaultValues,
   });
+
+  // Etiket yöne göre değişir: "alınış" ile "veriliş" aynı şey değildir.
+  const izlenenYon = useWatch({ control, name: "yon" });
 
   const onSubmit = handleSubmit(() => {
     setServerError(null);
@@ -113,6 +117,20 @@ export function CekSenetForm({
             placeholder="0,00"
             aria-invalid={Boolean(errors.tutar)}
             {...register("tutar")}
+          />
+        </Field>
+
+        <Field
+          id="tarih"
+          label={izlenenYon === "VERILEN" ? "Veriliş tarihi" : "Alınış tarihi"}
+          error={errors.tarih?.message}
+          hint="Cari bakiyesi bu tarihte değişir."
+        >
+          <Input
+            id="tarih"
+            type="date"
+            aria-invalid={Boolean(errors.tarih)}
+            {...register("tarih")}
           />
         </Field>
 

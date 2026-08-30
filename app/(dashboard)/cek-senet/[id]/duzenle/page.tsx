@@ -32,6 +32,7 @@ export default async function CekSenetDuzenlePage({
           yon: kayit.yon,
           cariId: kayit.cariId,
           tutar: formatAmount(kayit.tutar),
+          tarih: toDateInputValue(kayit.tarih),
           vadeTarihi: toDateInputValue(kayit.vadeTarihi),
           aciklama: kayit.aciklama ?? "",
         }}

@@ -5,11 +5,12 @@ import { Pencil } from "lucide-react";
 import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { CariActions } from "@/components/cari/cari-actions";
+import { CariEkstre } from "@/components/cari/cari-ekstre";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel } from "@/components/ui/card";
-import { cariSilinebilirMi, getCari } from "@/lib/cari";
+import { cariEkstresiGetir, cariSilinebilirMi, getCari } from "@/lib/cari";
 import { formatTarih } from "@/lib/date";
 import { toDecimal } from "@/lib/money";
 import { CARI_TIP_ETIKETI } from "@/lib/validations/cari";
@@ -35,8 +36,11 @@ export default async function CariDetayPage({
   const { id } = await params;
   // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
   const yonetici = await isAdmin();
-  const cari = await getCari(id);
-  if (!cari) notFound();
+  const [cari, ekstre] = await Promise.all([
+    getCari(id),
+    cariEkstresiGetir(id),
+  ]);
+  if (!cari || !ekstre) notFound();
 
   const { silinebilir } = await cariSilinebilirMi(cari.id);
   const bakiye = toDecimal(cari.bakiye);
@@ -47,7 +51,7 @@ export default async function CariDetayPage({
       : "Siz cariye borçlusunuz";
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex max-w-5xl flex-col gap-8">
       <PageHeader
         title={cari.unvan}
         description={CARI_TIP_ETIKETI[cari.tip]}
@@ -111,6 +115,8 @@ export default async function CariDetayPage({
           </span>
         </Satir>
       </Card>
+
+      <CariEkstre ekstre={ekstre} cariId={cari.id} />
     </div>
   );
 }

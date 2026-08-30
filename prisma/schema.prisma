@@ -226,8 +226,15 @@ model CekSenet {
   // Tahsil edilen toplam. HER ZAMAN Σ CekSenetTahsilat.tutar değerine eşittir;
   // elle yazılmaz, cekSenetiDogrula() ile mutabakatı ölçülür.
   tahsilEdilen Decimal          @default(0)
+  /// Çekin ALINDIĞI / VERİLDİĞİ tarih — vade değil. Cari bakiyesi bu anda
+  /// değiştiği için ekstre bu tarihe göre sıralanır. createdAt kullanılsaydı
+  /// geriye dönük girilen çek ekstrede giriş gününe düşerdi.
+  tarih        DateTime         @default(now())
   vadeTarihi   DateTime
   durum        CekSenetDurumu   @default(PORTFOYDE)
+  /// Karşılıksız işaretlendiği tarih. updatedAt kullanılsaydı çekin herhangi
+  /// bir alanı düzenlendiğinde ekstredeki geri dönüş satırı yer değiştirirdi.
+  karsiliksizTarihi DateTime?
   aciklama     String?
   tahsilatlar  CekSenetTahsilat[]
   createdAt    DateTime         @default(now())
@@ -235,6 +242,7 @@ model CekSenet {
 
   @@index([cariId])
   @@index([durum])
+  @@index([tarih])
   @@index([vadeTarihi])
   @@index([yon])
   @@index([ciroEdilenCariId])

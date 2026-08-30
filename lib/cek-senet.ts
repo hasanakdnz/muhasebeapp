@@ -33,6 +33,8 @@ export type CekSenetSatiri = {
   tutar: string;
   tahsilEdilen: string;
   kalan: string;
+  /** Çekin alındığı/verildiği tarih (vade değil). */
+  tarih: Date;
   vadeTarihi: Date;
   durum: CekSenetDurumuValue;
   aciklama: string | null;
@@ -67,6 +69,7 @@ function satiraCevir(kayit: {
   cari: { unvan: string };
   tutar: unknown;
   tahsilEdilen: unknown;
+  tarih: Date;
   vadeTarihi: Date;
   durum: CekSenetDurumuValue;
   aciklama: string | null;
@@ -85,6 +88,7 @@ function satiraCevir(kayit: {
     tutar: tutar.toString(),
     tahsilEdilen: tahsilEdilen.toString(),
     kalan: tutar.minus(tahsilEdilen).toString(),
+    tarih: kayit.tarih,
     vadeTarihi: kayit.vadeTarihi,
     durum: kayit.durum,
     aciklama: kayit.aciklama,
@@ -144,6 +148,8 @@ export type CekSenetYaziVerisi = {
   yon: CekSenetYonuValue;
   cariId: string;
   tutar: string;
+  /** Çekin alındığı/verildiği tarih; verilmezse bugün. */
+  tarih?: Date;
   vadeTarihi: Date;
   aciklama?: string;
 };
@@ -163,6 +169,7 @@ export async function cekSenetOlustur(
         yon: veri.yon,
         cariId: veri.cariId,
         tutar: roundMoney(veri.tutar).toString(),
+        tarih: veri.tarih ?? new Date(),
         vadeTarihi: veri.vadeTarihi,
         aciklama: veri.aciklama ?? null,
       },
@@ -205,6 +212,7 @@ export async function cekSenetGuncelle(
         yon: veri.yon,
         cariId: veri.cariId,
         tutar: yeniTutar.toString(),
+        ...(veri.tarih ? { tarih: veri.tarih } : {}),
         vadeTarihi: veri.vadeTarihi,
         aciklama: veri.aciklama ?? null,
         // Tutar değişince tamamlanma durumu da değişebilir.
@@ -358,7 +366,16 @@ export async function durumDegistir(
           )
         : yeniDurum;
 
-    await tx.cekSenet.update({ where: { id }, data: { durum } });
+    await tx.cekSenet.update({
+      where: { id },
+      data: {
+        durum,
+        // Geri dönüş satırının ekstrede sabit bir yeri olsun diye tarih
+        // saklanır; updatedAt kullanılsaydı çekin herhangi bir alanı
+        // düzenlendiğinde satır yer değiştirirdi.
+        karsiliksizTarihi: durum === "KARSILIKSIZ" ? new Date() : null,
+      },
+    });
 
     // KARSILIKSIZ'a geçiş tahsil EDİLEMEYEN kısmı borç olarak geri getirir;
     // portföye dönüş bunu yeniden kapatır. İkisi de bakiyeyi değiştirir.

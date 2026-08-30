@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { roundMoney, toDecimal } from "@/lib/money";
+import { formatTarih } from "@/lib/date";
 import { aramaNormalize } from "@/lib/text";
 import {
   cariBakiyeEtkisi,
@@ -7,10 +8,22 @@ import {
   hesaplaCariBakiyesi,
 } from "@/lib/domain/islem";
 import {
+  CEK_SENET_TIP_ETIKETI,
   cekCariEtkisi,
   ciroHedefEtkisi,
 } from "@/lib/domain/cek-senet";
-import { odemeCariEtkisi } from "@/lib/domain/odeme";
+import {
+  ODEME_KAYNAK_ETIKETI,
+  odemeCariEtkisi,
+  type OdemeKaynagiValue,
+} from "@/lib/domain/odeme";
+import {
+  cariEkstresi,
+  ekstreMutabik,
+  ekstreOzeti,
+  type CariHareketi,
+  type EkstreSatiri,
+} from "@/lib/domain/cari-ekstre";
 import type { Tx } from "@/lib/islem";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 import type { CariTipiValue } from "@/lib/validations/cari";
@@ -93,48 +106,151 @@ function ortakAlanlar(veri: CariYaziVerisi) {
  *     etkilenir; çeki veren müşterinin borcu (2)'de zaten kapanmıştır.
  *  4. DİREKT fatura ödemeleri (nakit/banka).
  *
- * Çek tahsilatından doğan fatura ödemeleri burada SAYILMAZ: o borç (2)'de
+ * Çek tahsilatından doğan fatura ödemeleri bakiyeyi ETKİLEMEZ: o borç (2)'de
  * zaten kapandı, tekrar sayılırsa çift sayım olur. odemeCariEtkisi bu ayrımı
- * yapar ve CEK_TAHSILATI için sıfır döner.
+ * yapar ve CEK_TAHSILATI için sıfır döner — satır ekstrede yine görünür,
+ * çünkü "bu fatura çek tahsilatıyla kapandı" bilgisi kullanıcı için anlamlıdır.
  *
  * Biri unutulursa `bakiye = açılış + Σ etki` değişmezi yanlış alarm verir.
  */
-async function cariEtkileri(cariId: string, db: Tx): Promise<string[]> {
+export async function cariHareketleri(
+  cariId: string,
+  db: Tx
+): Promise<CariHareketi[]> {
   const [islemler, cekler, ciroAlinan, odemeler] = await Promise.all([
     db.islem.findMany({
       where: { cariId },
-      select: { tip: true, toplamTutar: true },
+      select: {
+        id: true,
+        tip: true,
+        tarih: true,
+        toplamTutar: true,
+        kalemler: { select: { urunAdi: true }, take: 1 },
+        _count: { select: { kalemler: true } },
+      },
     }),
     db.cekSenet.findMany({
       where: { cariId },
-      select: { yon: true, durum: true, tutar: true, tahsilEdilen: true },
+      select: {
+        id: true,
+        tip: true,
+        yon: true,
+        durum: true,
+        tutar: true,
+        tahsilEdilen: true,
+        tarih: true,
+        vadeTarihi: true,
+        aciklama: true,
+        karsiliksizTarihi: true,
+        updatedAt: true,
+      },
     }),
     // Başkasından alınıp BU cariye ciro edilen çekler.
     db.cekSenet.findMany({
       where: { ciroEdilenCariId: cariId, durum: "CIRO_EDILDI" },
-      select: { tutar: true },
+      select: {
+        id: true,
+        tip: true,
+        tutar: true,
+        aciklama: true,
+        ciroTarihi: true,
+        tarih: true,
+      },
     }),
     db.islemOdeme.findMany({
       where: { islem: { cariId } },
-      select: { tutar: true, kaynak: true, islem: { select: { tip: true } } },
+      select: {
+        id: true,
+        tutar: true,
+        tarih: true,
+        kaynak: true,
+        aciklama: true,
+        islem: { select: { id: true, tip: true } },
+      },
     }),
   ]);
 
-  return [
-    ...islemler.map((i) => cariBakiyeEtkisi(i.tip, i.toplamTutar.toString())),
-    ...cekler.map((c) =>
-      cekCariEtkisi(
-        c.yon,
-        c.durum,
-        c.tutar.toString(),
-        c.tahsilEdilen.toString()
-      )
-    ),
-    ...ciroAlinan.map((c) => ciroHedefEtkisi(c.tutar.toString())),
-    ...odemeler.map((o) =>
-      odemeCariEtkisi(o.islem.tip, o.kaynak, o.tutar.toString())
-    ),
-  ];
+  const hareketler: CariHareketi[] = [];
+
+  for (const i of islemler) {
+    const ilk = i.kalemler[0]?.urunAdi;
+    const kalan = i._count.kalemler - 1;
+    hareketler.push({
+      tarih: i.tarih,
+      tur: i.tip === "SATIS" ? "SATIS" : "ALIS",
+      aciklama: ilk ? (kalan > 0 ? `${ilk} +${kalan} kalem` : ilk) : null,
+      etki: cariBakiyeEtkisi(i.tip, i.toplamTutar.toString()),
+      href: `/islemler/${i.id}`,
+    });
+  }
+
+  for (const c of cekler) {
+    const etiket = `${CEK_SENET_TIP_ETIKETI[c.tip]}${
+      c.aciklama ? ` · ${c.aciklama}` : ""
+    } · vade ${formatTarih(c.vadeTarihi)}`;
+
+    hareketler.push({
+      tarih: c.tarih,
+      tur: c.yon === "ALINAN" ? "CEK_ALINAN" : "CEK_VERILEN",
+      aciklama: etiket,
+      // Karşılıksız olsa bile ALINDIĞI andaki etki tam tutardır; geri dönüş
+      // aşağıda AYRI bir satır olarak yazılır (bkz. lib/domain/cari-ekstre.ts).
+      etki: cekCariEtkisi(c.yon, "PORTFOYDE", c.tutar.toString(), "0"),
+      href: `/cek-senet/${c.id}`,
+    });
+
+    if (c.durum === "KARSILIKSIZ") {
+      const geriDonen = roundMoney(c.tutar).minus(roundMoney(c.tahsilEdilen));
+      hareketler.push({
+        // karsiliksizTarihi eski kayıtlarda boş olabilir; o zaman en yakın
+        // bilgi son güncelleme zamanıdır.
+        tarih: c.karsiliksizTarihi ?? c.updatedAt,
+        tur: "CEK_KARSILIKSIZ",
+        aciklama: `${etiket} · tahsil edilemeyen`,
+        etki: (c.yon === "ALINAN"
+          ? geriDonen
+          : geriDonen.negated()
+        ).toString(),
+        href: `/cek-senet/${c.id}`,
+      });
+    }
+  }
+
+  for (const c of ciroAlinan) {
+    hareketler.push({
+      tarih: c.ciroTarihi ?? c.tarih,
+      tur: "CIRO_ALINAN",
+      aciklama: `${CEK_SENET_TIP_ETIKETI[c.tip]}${
+        c.aciklama ? ` · ${c.aciklama}` : ""
+      }`,
+      etki: ciroHedefEtkisi(c.tutar.toString()),
+      href: `/cek-senet/${c.id}`,
+    });
+  }
+
+  for (const o of odemeler) {
+    hareketler.push({
+      tarih: o.tarih,
+      tur: "ODEME",
+      aciklama: `${ODEME_KAYNAK_ETIKETI[o.kaynak as OdemeKaynagiValue]}${
+        o.aciklama ? ` · ${o.aciklama}` : ""
+      }`,
+      etki: odemeCariEtkisi(o.islem.tip, o.kaynak, o.tutar.toString()),
+      href: `/islemler/${o.islem.id}`,
+    });
+  }
+
+  return hareketler;
+}
+
+/**
+ * Bakiyeyi oluşturan etkiler. Ekstre hareketlerinden TÜRETİLİR — iki ayrı
+ * sorgu olsaydı biri güncellenip diğeri unutulduğunda ekstre ile bakiye
+ * sessizce ayrışırdı. Tek kaynak: `cariHareketleri`.
+ */
+async function cariEtkileri(cariId: string, db: Tx): Promise<string[]> {
+  const hareketler = await cariHareketleri(cariId, db);
+  return hareketler.map((h) => h.etki);
 }
 
 /**
@@ -335,5 +451,50 @@ export async function cariBakiyesiniDogrula(
     ),
     saklanan: roundMoney(cari.bakiye).toString(),
     hesaplanan: hesaplaCariBakiyesi(cari.acilisBakiyesi.toString(), etkiler),
+  };
+}
+
+export type CariEkstresi = {
+  acilisBakiyesi: string;
+  satirlar: EkstreSatiri[];
+  sonBakiye: string;
+  toplamAlacak: string;
+  toplamBorc: string;
+  hareketSayisi: number;
+  /**
+   * Ekstrenin son bakiyesi saklanan bakiyeyle tutuyor mu? Tutmuyorsa ekrana
+   * uyarı basılır — sessizce yanlış bir ekstre göstermek, hiç göstermemekten
+   * kötüdür.
+   */
+  mutabik: boolean;
+};
+
+/**
+ * Cari ekstresi: bakiyeyi oluşturan her hareket, kronolojik ve yürüyen
+ * bakiyeli. Bakiye ile aynı kaynaktan (`cariHareketleri`) türer.
+ */
+export async function cariEkstresiGetir(
+  cariId: string,
+  db: Db = prisma
+): Promise<CariEkstresi | null> {
+  const cari = await db.cari.findUnique({
+    where: { id: cariId },
+    select: { acilisBakiyesi: true, bakiye: true },
+  });
+  if (!cari) return null;
+
+  const acilis = roundMoney(cari.acilisBakiyesi).toString();
+  const hareketler = await cariHareketleri(cariId, db);
+  const satirlar = cariEkstresi(acilis, hareketler);
+  const ozet = ekstreOzeti(satirlar);
+
+  return {
+    acilisBakiyesi: acilis,
+    satirlar,
+    sonBakiye: roundMoney(cari.bakiye).toString(),
+    toplamAlacak: ozet.toplamAlacak,
+    toplamBorc: ozet.toplamBorc,
+    hareketSayisi: ozet.hareketSayisi,
+    mutabik: ekstreMutabik(cari.bakiye.toString(), acilis, satirlar),
   };
 }
