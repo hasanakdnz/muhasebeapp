@@ -30,8 +30,8 @@ export default async function CekSenetDetayPage({
 }) {
   const { id } = await params;
   // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
-  const yonetici = await isAdmin();
-  const [kayit, cariler, hesaplar] = await Promise.all([
+  const [yonetici, kayit, cariler, hesaplar] = await Promise.all([
+    isAdmin(),
     getCekSenet(id),
     listeleCariler(),
     listeleHesaplar(),

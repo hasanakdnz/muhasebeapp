@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
-import { NakitAkisi } from "@/components/dashboard/nakit-akisi";
+import { NakitAkisiYukleyici } from "@/components/dashboard/nakit-akisi-yukleyici";
 import { SayanTutar } from "@/components/dashboard/sayan-tutar";
 import { Amount } from "@/components/ui/amount";
 import { buttonVariants } from "@/components/ui/button";
@@ -116,7 +116,7 @@ export default async function DashboardPage() {
 
       <Card className="flex flex-col gap-6">
         <CardTitle>Nakit akışı</CardTitle>
-        <NakitAkisi veriler={nakitAkisi} />
+        <NakitAkisiYukleyici veriler={nakitAkisi} />
       </Card>
     </div>
   );

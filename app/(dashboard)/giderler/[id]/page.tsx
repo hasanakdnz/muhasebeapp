@@ -20,8 +20,7 @@ export default async function GiderDetayPage({
 }) {
   const { id } = await params;
   // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
-  const yonetici = await isAdmin();
-  const gider = await getGider(id);
+  const [yonetici, gider] = await Promise.all([isAdmin(), getGider(id)]);
   if (!gider) notFound();
 
   const belgeUrl = gider.belgeUrl ? `/api/belge/${gider.belgeUrl}` : null;

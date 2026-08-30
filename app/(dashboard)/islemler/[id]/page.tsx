@@ -33,16 +33,18 @@ export default async function IslemDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
-  const yonetici = await isAdmin();
-  const islem = await getIslem(id);
-  if (!islem) notFound();
 
-  const [odemeler, cekler, hesaplar] = await Promise.all([
-    listeleOdemeler(islem.id),
-    kullanilabilirCekler(islem.cariId),
+  // İşlemi ve ondan bağımsız olanları birlikte çek; yalnızca cariye bağlı
+  // olan sorgu işlemin gelmesini beklemek zorunda.
+  const [yonetici, islem, odemeler, hesaplar] = await Promise.all([
+    isAdmin(),
+    getIslem(id),
+    listeleOdemeler(id),
     listeleHesaplar(),
   ]);
+  if (!islem) notFound();
+
+  const cekler = await kullanilabilirCekler(islem.cariId);
 
   const statusVaryanti =
     islem.status === "ODENDI"

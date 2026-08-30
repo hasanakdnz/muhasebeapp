@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -27,21 +28,12 @@ export type SessionUser = {
  * geçerli olur.
  */
 export async function requireUser(): Promise<SessionUser> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    throw new Error("Bu işlem için oturum açmanız gerekiyor.");
-  }
-
-  const guncel = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, role: true, name: true, email: true },
-  });
+  const guncel = await gecerliKullanici();
   if (!guncel) {
     throw new Error(
-      "Hesabınız artık geçerli değil. Lütfen yeniden giriş yapın."
+      "Oturumunuz geçersiz. Lütfen yeniden giriş yapın."
     );
   }
-
   return guncel;
 }
 
@@ -72,16 +64,23 @@ export async function adminVeyaHata(): Promise<
 /**
  * Oturumu açık kullanıcı — yoksa veya artık veritabanında yoksa null.
  * Sayfa katmanı bunu kullanır; action katmanı `requireUser` ile hata fırlatır.
+ *
+ * `cache()` ile SARILI: tek bir istek içinde kaç kez çağrılırsa çağrılsın
+ * oturum bir kez çözülür ve kullanıcı bir kez okunur. Sarılmadan önce layout
+ * bir, sayfa bir daha çağırıyordu ve detay sayfaları liste sayfalarının 5
+ * katı sürüyordu (ölçüm: 580ms / 100ms).
  */
-export async function gecerliKullanici(): Promise<SessionUser | null> {
-  const session = await auth();
-  if (!session?.user?.id) return null;
+export const gecerliKullanici = cache(
+  async (): Promise<SessionUser | null> => {
+    const session = await auth();
+    if (!session?.user?.id) return null;
 
-  return prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, role: true, name: true, email: true },
-  });
-}
+    return prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, role: true, name: true, email: true },
+    });
+  }
+);
 
 /** Sayfaların yönetici-özel UI'ı gizlemesi için. */
 export async function isAdmin(): Promise<boolean> {

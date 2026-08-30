@@ -34,15 +34,18 @@ export default async function CariDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
-  const yonetici = await isAdmin();
-  const [cari, ekstre] = await Promise.all([
+
+  // Dördü birbirinden bağımsız; sırayla beklenirse sayfa gecikmelerin
+  // TOPLAMI kadar sürer. Silme yalnızca yöneticide (lib/rbac.ts).
+  const [yonetici, cari, ekstre, silinebilirDurum] = await Promise.all([
+    isAdmin(),
     getCari(id),
     cariEkstresiGetir(id),
+    cariSilinebilirMi(id),
   ]);
   if (!cari || !ekstre) notFound();
 
-  const { silinebilir } = await cariSilinebilirMi(cari.id);
+  const { silinebilir } = silinebilirDurum;
   const bakiye = toDecimal(cari.bakiye);
   const bakiyeAciklamasi = bakiye.isZero()
     ? "Hesap kapalı"

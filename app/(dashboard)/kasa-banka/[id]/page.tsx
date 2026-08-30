@@ -28,15 +28,15 @@ export default async function HesapDetayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Dördü de birbirinden bağımsız; sıralı beklemek gecikmeleri toplardı.
   // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
-  const yonetici = await isAdmin();
-  const hesap = await getHesap(id);
-  if (!hesap) notFound();
-
-  const [hareketler, { silinebilir }] = await Promise.all([
-    listeleHareketler(hesap.id),
-    hesapSilinebilirMi(hesap.id),
+  const [yonetici, hesap, hareketler, { silinebilir }] = await Promise.all([
+    isAdmin(),
+    getHesap(id),
+    listeleHareketler(id),
+    hesapSilinebilirMi(id),
   ]);
+  if (!hesap) notFound();
   const ozet = hesaplaHareketOzeti(hareketler.map((h) => h.tutar));
 
   return (

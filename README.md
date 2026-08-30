@@ -115,6 +115,38 @@ action ayrıca `adminVeyaHata()` ile doğrular. Guard hata FIRLATMAZ, action
 sözleşmesine uyan bir sonuç döner; aksi halde personel silme düğmesine basınca
 çökme ekranı görürdü.
 
+## Performans
+
+Ölçüm önce, iyileştirme sonra. Sonuçlar (bu makinede, production build):
+
+| | Önce | Sonra |
+|---|---|---|
+| Sayfa yanıtı (production, tüm sayfalar) | 10–16 ms | 10–16 ms |
+| Detay sayfası (dev sunucusu) | ~550 ms | ~170 ms |
+| Pano ilk yükleme JS | 241 kB | **130 kB** |
+
+- **Yavaşlık uygulamada değildi.** Detay sayfaları liste sayfalarının 5 katı
+  sürüyordu (548 ms / 100 ms); veri katmanını 120 cari + 1440 işlemle ölçtüm,
+  tüm liste ve raporlar 1–18 ms sürüyor ve N+1 yok. Aynı sayfalar production
+  build'de 10–16 ms. Fark tamamen `next dev`'in istek başına yaptığı işti.
+  Bu yüzden dev sunucusu **Turbopack**'e alındı (`next dev --turbopack`);
+  detay sayfaları ~170 ms'ye indi. Webpack'e dönmek gerekirse:
+  `npm run dev:webpack`.
+
+- **Pano paketi yarıya indi.** Recharts tek başına 114 kB'lık rota kodunun
+  tamamıydı (diğer sayfalar ~1 kB) ve pano giriş sonrası açılan ilk sayfa.
+  Grafik `next/dynamic` ile geç yükleniyor: kasa/alacak rakamları beklemeden
+  geliyor, yer tutucu grafikle aynı yükseklikte olduğu için sayfa zıplamıyor.
+
+- **Sayfa içi bekleme zincirleri paralelleştirildi.** Detay sayfaları yetki
+  kontrolünü ve birbirinden bağımsız sorguları sırayla bekliyordu; artık tek
+  `Promise.all`. Ayrıca `gecerliKullanici` React `cache()` ile sarıldı — layout
+  ve sayfa aynı istekte iki kez oturum çözüp iki kez kullanıcı okuyordu.
+
+> **Dağıtım notu.** Production'da Auth.js `AUTH_URL` ya da `AUTH_TRUST_HOST`
+> ister; yoksa giriş `UntrustedHost` ile 500 döner. Ölçüm sırasında yakalandı.
+> Ayrıntılı dağıtım konuları ROADMAP Faz 9'da.
+
 ## Güvenlik
 
 Bulunan ve kapatılan açıklar (hepsi `tests/guvenlik.test.ts` ile sabitlendi):
