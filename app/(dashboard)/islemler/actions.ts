@@ -47,6 +47,7 @@ export async function createIslem(values: IslemInput): Promise<ActionResult> {
       cariId: islem.cariId,
       tarih: islem.tarih,
       vadeTarihi: islem.vadeTarihi,
+      belgeNo: islem.belgeNo,
       kalemler: kalemler.map((k) => ({
         urunAdi: k.urunAdi,
         miktar: k.miktar,
@@ -82,7 +83,7 @@ export async function deleteIslem(
   // Silinen kaydın kimliği log için silmeden ÖNCE okunur.
   const islem = await prisma.islem.findUnique({
     where: { id },
-    select: { tip: true, tarih: true, toplamTutar: true },
+    select: { no: true, tip: true, tarih: true, toplamTutar: true },
   });
 
   await islemSil(id);
@@ -92,6 +93,7 @@ export async function deleteIslem(
     hedefTip: "Islem",
     hedefId: id,
     detay: {
+      no: islem?.no,
       tip: islem?.tip,
       tarih: islem?.tarih?.toISOString(),
       tutar: islem?.toplamTutar?.toString(),

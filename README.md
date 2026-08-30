@@ -202,6 +202,21 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   Eşleştirilmiş çek korunur: faturaya sayılmış bir çek karşılıksız
   işaretlenemez ve silinemez (önce eşleştirme kaldırılmalı). İzin verilseydi
   borç cariye geri dönerken fatura "ödendi" kalır, iki defter ayrışırdı.
+- **Belge numaraları:** Her işlemin bir iç referans numarası vardır —
+  `FTR-2026-0001` (satış) / `ALS-2026-0001` (alış). Tipe göre AYRI sayaç:
+  satış faturası serisi kesintisiz olmalıdır, alış kayıtları o seride boşluk
+  açmamalıdır. Numara transaction içinde üretilir ve `@unique`; yarış olursa
+  veritabanı reddeder.
+
+  Karşı tarafın kendi belge numarası ayrı bir alandadır (`Islem.belgeNo`):
+  alış faturasında fişin üzerindeki numara odur, biz üretemeyiz. Boş
+  bırakılabilir.
+
+  Sıra kayıt sayısından DEĞİL, o yılın mevcut numaraları arasındaki en
+  büyüğünden üretilir — aradan bir kayıt silinirse sayı düşer ve kullanılmış
+  bir numara yeniden verilirdi. Kural teklif, satış ve alış için tek yerdedir
+  (`lib/domain/belge-no.ts`); üç kopya olsaydı biri düzeltilip diğerleri
+  unutulabilirdi.
 - **Kasa/Banka entegrasyonu:** Çek tahsilatı, DİREKT fatura ödemesi ve gider,
   seçilen hesapta AYNI transaction içinde bir `HesapHareketi` üretir. Önce
   hiçbiri kasaya dokunmuyordu; kullanıcı aynı parayı iki kez girmek zorundaydı

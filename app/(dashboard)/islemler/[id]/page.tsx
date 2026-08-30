@@ -56,8 +56,12 @@ export default async function IslemDetayPage({
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title={`${ISLEM_TIP_ETIKETI[islem.tip]} · ${formatTarih(islem.tarih)}`}
-        description={islem.cariUnvan}
+        title={`${ISLEM_TIP_ETIKETI[islem.tip]} ${islem.no}`}
+        description={
+          islem.belgeNo
+            ? `${islem.cariUnvan} · belge no ${islem.belgeNo} · ${formatTarih(islem.tarih)}`
+            : `${islem.cariUnvan} · ${formatTarih(islem.tarih)}`
+        }
         actions={
           <div className="flex flex-col items-end gap-3">
             <Link

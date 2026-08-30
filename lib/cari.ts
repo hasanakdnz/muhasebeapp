@@ -122,6 +122,8 @@ export async function cariHareketleri(
       where: { cariId },
       select: {
         id: true,
+        no: true,
+        belgeNo: true,
         tip: true,
         tarih: true,
         toplamTutar: true,
@@ -175,10 +177,14 @@ export async function cariHareketleri(
   for (const i of islemler) {
     const ilk = i.kalemler[0]?.urunAdi;
     const kalan = i._count.kalemler - 1;
+    const icerik = ilk ? (kalan > 0 ? `${ilk} +${kalan} kalem` : ilk) : null;
+    // Belge numarası başa yazılır: mutabakatta "hangi fatura?" sorusunun
+    // cevabı ürün adı değil, numaradır.
+    const belge = i.belgeNo ? `${i.no} · ${i.belgeNo}` : i.no;
     hareketler.push({
       tarih: i.tarih,
       tur: i.tip === "SATIS" ? "SATIS" : "ALIS",
-      aciklama: ilk ? (kalan > 0 ? `${ilk} +${kalan} kalem` : ilk) : null,
+      aciklama: icerik ? `${belge} · ${icerik}` : belge,
       etki: cariBakiyeEtkisi(i.tip, i.toplamTutar.toString()),
       href: `/islemler/${i.id}`,
     });

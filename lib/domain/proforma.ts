@@ -1,3 +1,8 @@
+import {
+  belgeNoAyristir,
+  belgeNoUret,
+  sonrakiBelgeNo,
+} from "@/lib/domain/belge-no";
 import { kalanGun } from "@/lib/domain/vade";
 
 /**
@@ -92,38 +97,20 @@ export function donusturulebilirMi(durum: ProformaDurumuValue): boolean {
 /* ------------------------------------------------------------------ */
 
 export const PROFORMA_NO_ONEKI = "PRF";
-const SIRA_BASAMAK = 4;
 
-/**
- * PRF-2026-0001 — yıl bazlı sıra. Yıl değişince sıra 1'e döner; teklif
- * numarası aynı yıl içinde benzersizdir ve dosyalamada okunaklıdır.
- */
+/** PRF-2026-0001 — ortak kural için bkz. lib/domain/belge-no.ts */
 export function proformaNoUret(yil: number, sira: number): string {
-  return `${PROFORMA_NO_ONEKI}-${yil}-${String(sira).padStart(SIRA_BASAMAK, "0")}`;
+  return belgeNoUret(PROFORMA_NO_ONEKI, yil, sira);
 }
 
 export function proformaNoAyristir(
   no: string
 ): { yil: number; sira: number } | null {
-  const eslesme = /^PRF-(\d{4})-(\d+)$/.exec(no.trim());
-  if (!eslesme) return null;
-  return { yil: Number(eslesme[1]), sira: Number(eslesme[2]) };
+  return belgeNoAyristir(PROFORMA_NO_ONEKI, no);
 }
 
-/**
- * O yılın bir sonraki numarası. Mevcut numaralar arasındaki EN BÜYÜK sıra
- * esas alınır — kayıt sayısı değil: aradan bir teklif silinirse sayı düşer ve
- * daha önce kullanılmış bir numara yeniden üretilirdi.
- */
 export function sonrakiProformaNo(yil: number, mevcutNolar: string[]): string {
-  let enBuyuk = 0;
-  for (const no of mevcutNolar) {
-    const parca = proformaNoAyristir(no);
-    if (parca && parca.yil === yil && parca.sira > enBuyuk) {
-      enBuyuk = parca.sira;
-    }
-  }
-  return proformaNoUret(yil, enBuyuk + 1);
+  return sonrakiBelgeNo(PROFORMA_NO_ONEKI, yil, mevcutNolar);
 }
 
 /* ------------------------------------------------------------------ */

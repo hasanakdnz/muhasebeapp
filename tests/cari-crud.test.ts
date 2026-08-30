@@ -156,6 +156,7 @@ describe("Cari — sil", () => {
 
     await db.prisma.islem.create({
       data: {
+        no: "FTR-2026-9001",
         tip: "SATIS",
         cariId: cari.id,
         toplamTutar: "1180",

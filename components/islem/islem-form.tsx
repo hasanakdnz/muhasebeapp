@@ -59,6 +59,9 @@ export function IslemForm({
 
   const { fields, append, remove } = useFieldArray({ control, name: "kalemler" });
 
+  // Belge no ipucu tipe göre değişir: alışta numara tedarikçinindir.
+  const izlenenTip = useWatch({ control, name: "tip" });
+
   // Canlı toplamlar sunucudakiyle AYNI alan fonksiyonlarıyla hesaplanır —
   // kullanıcının gördüğü tutar ile kaydedilen tutar ayrışamaz.
   const izlenen = useWatch({ control });
@@ -93,7 +96,7 @@ export function IslemForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-8">
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Field id="tip" label="İşlem tipi" error={errors.tip?.message}>
           <Select id="tip" aria-invalid={Boolean(errors.tip)} {...register("tip")}>
             {ISLEM_TIPLERI.map((t) => (
@@ -135,6 +138,19 @@ export function IslemForm({
           hint="Boş bırakılabilir."
         >
           <Input id="vadeTarihi" type="date" {...register("vadeTarihi")} />
+        </Field>
+
+        <Field
+          id="belgeNo"
+          label="Belge no"
+          error={errors.belgeNo?.message}
+          hint={
+            izlenenTip === "ALIS"
+              ? "Tedarikçinin fatura numarası."
+              : "E-fatura numaranız; boş bırakılabilir."
+          }
+        >
+          <Input id="belgeNo" {...register("belgeNo")} />
         </Field>
       </div>
 

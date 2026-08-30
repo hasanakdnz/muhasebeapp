@@ -120,6 +120,13 @@ model Cari {
 
 model Islem {
   id          String        @id @default(cuid())
+  /// Ic referans numarasi: FTR-2026-0001 (satis) / ALS-2026-0001 (alis).
+  /// Tipe gore AYRI sayac: satis faturasi serisi kesintisiz olmalidir, alis
+  /// kayitlari o seride bosluk acmamalidir.
+  no          String        @unique
+  /// Karsi tarafin kendi belge numarasi. Alis faturasinda fisin uzerindeki
+  /// numara budur ve biz uretemeyiz; satista e-fatura numarasi icin kullanilir.
+  belgeNo     String?
   tip         IslemTipi
   cariId      String
   // Restrict: işlemi olan cari silinemez — muhasebe kaydı sessizce yok edilmemeli.
@@ -140,6 +147,7 @@ model Islem {
   @@index([cariId])
   @@index([status])
   @@index([tarih])
+  @@index([belgeNo])
   @@index([vadeTarihi])
 }
 

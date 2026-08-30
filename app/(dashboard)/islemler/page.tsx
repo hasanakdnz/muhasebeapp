@@ -116,6 +116,7 @@ export default async function IslemlerPage({
         <LedgerTable>
           <LedgerHead>
             <tr>
+              <LedgerHeadCell>Belge no</LedgerHeadCell>
               <LedgerHeadCell>Tarih</LedgerHeadCell>
               <LedgerHeadCell>Tip</LedgerHeadCell>
               <LedgerHeadCell>Cari</LedgerHeadCell>
@@ -129,6 +130,14 @@ export default async function IslemlerPage({
           <LedgerBody>
             {islemler.map((islem) => (
               <LedgerRow key={islem.id}>
+                <LedgerCell className="whitespace-nowrap">
+                  <Link
+                    href={`/islemler/${islem.id}`}
+                    className="after:absolute after:inset-0"
+                  >
+                    <span data-numeric="">{islem.no}</span>
+                  </Link>
+                </LedgerCell>
                 <LedgerCell className="whitespace-nowrap text-muted">
                   <Link
                     href={`/islemler/${islem.id}`}

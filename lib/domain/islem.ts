@@ -1,3 +1,4 @@
+import { belgeNoUret, sonrakiBelgeNo } from "@/lib/domain/belge-no";
 import { roundMoney, toDecimal, type DecimalLike } from "@/lib/money";
 
 /**
@@ -158,4 +159,40 @@ export function cariBakiyesiMutabik(
   return roundMoney(saklananBakiye).equals(
     toDecimal(hesaplaCariBakiyesi(acilisBakiyesi, etkiler))
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Belge numarası                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Her işlemin bir iç referans numarası vardır: FTR-2026-0001 / ALS-2026-0001.
+ *
+ * Neden tipe göre ayrı önek ve ayrı sıra: satış faturasının numarasını BİZ
+ * veririz, alış faturasınınkini tedarikçi verir. Tek sayaç kullansaydık kendi
+ * satış serimizde boşluklar oluşurdu — oysa satış faturası serisi kesintisiz
+ * olmalıdır.
+ *
+ * Karşı tarafın kendi belge numarası ayrı bir alanda tutulur (`Islem.belgeNo`):
+ * alış faturasında fişin üzerindeki numara odur, biz üretemeyiz.
+ */
+export const ISLEM_NO_ONEKI: Record<IslemTipiValue, string> = {
+  SATIS: "FTR",
+  ALIS: "ALS",
+};
+
+export function islemNoUret(
+  tip: IslemTipiValue,
+  yil: number,
+  sira: number
+): string {
+  return belgeNoUret(ISLEM_NO_ONEKI[tip], yil, sira);
+}
+
+export function sonrakiIslemNo(
+  tip: IslemTipiValue,
+  yil: number,
+  mevcutNolar: string[]
+): string {
+  return sonrakiBelgeNo(ISLEM_NO_ONEKI[tip], yil, mevcutNolar);
 }

@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { roundMoney } from "@/lib/money";
 import {
+  ISLEM_NO_ONEKI,
   cariBakiyeEtkisi,
   hesaplaIslemToplamlari,
+  sonrakiIslemNo,
   tersEtki,
   type IslemTipiValue,
 } from "@/lib/domain/islem";
@@ -27,6 +29,10 @@ export {
 /** RSC sınırından geçebilmesi için Decimal'ler string'e çevrilir. */
 export type IslemSatiri = {
   id: string;
+  /** İç referans numarası: FTR-2026-0001 / ALS-2026-0001. */
+  no: string;
+  /** Karşı tarafın belge numarası (alış faturasında fişin üzerindeki no). */
+  belgeNo: string | null;
   tip: IslemTipiValue;
   cariId: string;
   cariUnvan: string;
@@ -63,6 +69,8 @@ export type IslemYaziVerisi = {
   cariId: string;
   tarih: Date;
   vadeTarihi?: Date;
+  /** Karşı tarafın belge numarası; iç numara (`no`) sunucuda üretilir. */
+  belgeNo?: string;
   kalemler: Array<{
     urunAdi: string;
     miktar: string;
@@ -109,6 +117,8 @@ export async function listeleIslemler(
     const odenen = roundMoney(i.odenenTutar);
     return {
       id: i.id,
+      no: i.no,
+      belgeNo: i.belgeNo,
       tip: i.tip,
       cariId: i.cariId,
       cariUnvan: i.cari.unvan,
@@ -144,6 +154,8 @@ export async function getIslem(
 
   return {
     id: islem.id,
+    no: islem.no,
+    belgeNo: islem.belgeNo,
     tip: islem.tip,
     cariId: islem.cariId,
     cariUnvan: islem.cari.unvan,
@@ -208,8 +220,23 @@ export async function islemYaz(
   });
   if (!cari) throw new Error("Cari bulunamadı.");
 
+  // Numara transaction İÇİNDE üretilir; iki eşzamanlı kayıt aynı numarayı
+  // almasın. `no` ayrıca @unique — yarış olursa veritabanı reddeder.
+  const yil = veri.tarih.getFullYear();
+  const mevcut = await tx.islem.findMany({
+    where: { no: { startsWith: `${ISLEM_NO_ONEKI[veri.tip]}-${yil}-` } },
+    select: { no: true },
+  });
+  const no = sonrakiIslemNo(
+    veri.tip,
+    yil,
+    mevcut.map((m) => m.no)
+  );
+
   const islem = await tx.islem.create({
     data: {
+      no,
+      belgeNo: veri.belgeNo ?? null,
       tip: veri.tip,
       cariId: veri.cariId,
       tarih: veri.tarih,

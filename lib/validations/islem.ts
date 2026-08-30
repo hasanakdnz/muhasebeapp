@@ -6,6 +6,7 @@ import {
 } from "@/lib/domain/islem";
 import {
   opsiyonelTarihAlani,
+  optionalText,
   sayiAlani,
   tarihAlani,
 } from "@/lib/validations/common";
@@ -37,6 +38,11 @@ export const kalemSchema = z.object({
 export const islemSchema = z.object({
   tip: z.enum(ISLEM_TIPLERI, { message: "İşlem tipi seçin." }),
   cariId: z.string().trim().min(1, "Cari seçin."),
+  /**
+   * Karşı tarafın belge numarası. Alış faturasında fişin üzerindeki numaradır;
+   * iç referans numarası (`Islem.no`) sunucuda üretilir, kullanıcı giremez.
+   */
+  belgeNo: optionalText(50, "Belge no"),
   tarih: tarihAlani,
   // Boş bırakılırsa "vade yok" demektir; bugüne DÜŞMEZ.
   vadeTarihi: opsiyonelTarihAlani,
@@ -62,6 +68,7 @@ export const bosKalem: KalemInput = {
 export const islemFormDefaults: IslemInput = {
   tip: "SATIS",
   cariId: "",
+  belgeNo: "",
   tarih: "",
   vadeTarihi: "",
   kdvDahil: false,
