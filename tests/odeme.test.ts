@@ -5,8 +5,8 @@ import {
   odemeKontrol,
   odemeMutabik,
   sonrakiStatus,
-  tahsilatDagitilabilirKalan,
-  tahsilatDagitimKontrol,
+  cekDagitilabilirKalan,
+  cekDagitimKontrol,
 } from "@/lib/domain/odeme";
 
 describe("hesaplaOdeme", () => {
@@ -117,19 +117,19 @@ describe("odemeKontrol — fazla ödeme engeli", () => {
 
 describe("tahsilat dağıtımı", () => {
   it("dağıtılabilir kalanı hesaplar", () => {
-    expect(tahsilatDagitilabilirKalan("5000", [])).toBe("5000");
-    expect(tahsilatDagitilabilirKalan("5000", ["2000", "1500"])).toBe("1500");
-    expect(tahsilatDagitilabilirKalan("5000", ["5000"])).toBe("0");
+    expect(cekDagitilabilirKalan("5000", [])).toBe("5000");
+    expect(cekDagitilabilirKalan("5000", ["2000", "1500"])).toBe("1500");
+    expect(cekDagitilabilirKalan("5000", ["5000"])).toBe("0");
   });
 
   it("tahsilat tutarını aşan dağıtımı reddeder", () => {
-    const r = tahsilatDagitimKontrol("5000", ["3000"], "2000.01");
+    const r = cekDagitimKontrol("5000", ["3000"], "2000.01");
     expect(r.gecerli).toBe(false);
     expect(r.gecerli === false && r.hata).toMatch(/dağıtılabilecek tutar/i);
   });
 
   it("kalan kadar dağıtımı kabul eder", () => {
-    expect(tahsilatDagitimKontrol("5000", ["3000"], "2000").gecerli).toBe(true);
+    expect(cekDagitimKontrol("5000", ["3000"], "2000").gecerli).toBe(true);
   });
 });
 
@@ -137,8 +137,8 @@ describe("odemeCariEtkisi — ÇİFT SAYIM koruması", () => {
   it("çek tahsilatından gelen ödeme bakiyeyi ETKİLEMEZ", () => {
     // O para, çek tahsilatı kaydedilirken bakiyeden zaten düşüldü.
     // Burada da düşülseydi fatura bakiyeyi iki kez azaltırdı.
-    expect(odemeCariEtkisi("SATIS", "CEK_TAHSILATI", "5000")).toBe("0");
-    expect(odemeCariEtkisi("ALIS", "CEK_TAHSILATI", "5000")).toBe("0");
+    expect(odemeCariEtkisi("SATIS", "CEK", "5000")).toBe("0");
+    expect(odemeCariEtkisi("ALIS", "CEK", "5000")).toBe("0");
   });
 
   it("direkt ödeme satışta bakiyeyi düşürür", () => {

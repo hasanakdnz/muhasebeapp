@@ -7,8 +7,8 @@ import {
   odemeKontrol,
   odemeMutabik,
   sonrakiStatus,
-  tahsilatDagitilabilirKalan,
-  tahsilatDagitimKontrol,
+  cekDagitilabilirKalan,
+  cekDagitimKontrol,
   type OdemeKaynagiValue,
   type OdemeStatusuValue,
 } from "@/lib/domain/odeme";
@@ -21,7 +21,7 @@ export {
   odemeCariEtkisi,
   odemeKontrol,
   sonrakiStatus,
-  tahsilatDagitilabilirKalan,
+  cekDagitilabilirKalan,
   ODEME_KAYNAKLARI,
   ODEME_KAYNAK_ETIKETI,
   ODEME_STATUS_ETIKETI,
@@ -34,7 +34,7 @@ export type OdemeSatiri = {
   tarih: Date;
   kaynak: OdemeKaynagiValue;
   aciklama: string | null;
-  /** Kaynak çek tahsilatıysa ilgili çek/senedin kimliği ve açıklaması. */
+  /** Kaynak ÇEK ise faturayı kapatan çek/senedin kimliği ve açıklaması. */
   cekSenetId: string | null;
   cekSenetAciklamasi: string | null;
 };
@@ -47,11 +47,7 @@ export async function listeleOdemeler(
     where: { islemId },
     orderBy: [{ tarih: "asc" }, { id: "asc" }],
     include: {
-      cekSenetTahsilat: {
-        select: {
-          cekSenet: { select: { id: true, aciklama: true, vadeTarihi: true } },
-        },
-      },
+      cekSenet: { select: { id: true, aciklama: true, vadeTarihi: true } },
     },
   });
 
@@ -61,63 +57,61 @@ export async function listeleOdemeler(
     tarih: o.tarih,
     kaynak: o.kaynak,
     aciklama: o.aciklama,
-    cekSenetId: o.cekSenetTahsilat?.cekSenet.id ?? null,
-    cekSenetAciklamasi: o.cekSenetTahsilat?.cekSenet.aciklama ?? null,
+    cekSenetId: o.cekSenet?.id ?? null,
+    cekSenetAciklamasi: o.cekSenet?.aciklama ?? null,
   }));
 }
 
-export type KullanilabilirTahsilat = {
-  tahsilatId: string;
+export type KullanilabilirCek = {
   cekSenetId: string;
-  cekSenetAciklamasi: string | null;
-  tahsilatTarihi: Date;
-  tahsilatTutari: string;
+  aciklama: string | null;
+  vadeTarihi: Date;
+  tutar: string;
   /** Henüz hiçbir faturaya sayılmamış kısım. */
   dagitilabilir: string;
 };
 
 /**
- * Bu cariye ait çek tahsilatlarından, henüz faturalara dağıtılmamış kısmı
- * olanlar. Fatura ödemesini çek tahsilatına bağlarken kullanılır.
+ * Bu cariye ait çek/senetlerden, henüz faturalara dağıtılmamış kısmı olanlar.
+ * Fatura ödemesini çeke bağlarken kullanılır.
+ *
+ * Karşılıksız çekler DIŞARIDA bırakılır: yanan çek bir faturayı kapatamaz,
+ * borç zaten geri gelmiştir.
  */
-export async function kullanilabilirTahsilatlar(
+export async function kullanilabilirCekler(
   cariId: string,
   db: Db = prisma
-): Promise<KullanilabilirTahsilat[]> {
-  const tahsilatlar = await db.cekSenetTahsilat.findMany({
-    where: { cekSenet: { cariId } },
-    orderBy: [{ tarih: "desc" }, { id: "desc" }],
-    include: {
-      cekSenet: { select: { id: true, aciklama: true } },
-      islemOdemeleri: { select: { tutar: true } },
-    },
+): Promise<KullanilabilirCek[]> {
+  const cekler = await db.cekSenet.findMany({
+    where: { cariId, durum: { not: "KARSILIKSIZ" } },
+    orderBy: [{ vadeTarihi: "asc" }, { id: "asc" }],
+    include: { islemOdemeleri: { select: { tutar: true } } },
   });
 
-  return tahsilatlar
-    .map((t) => ({
-      tahsilatId: t.id,
-      cekSenetId: t.cekSenet.id,
-      cekSenetAciklamasi: t.cekSenet.aciklama,
-      tahsilatTarihi: t.tarih,
-      tahsilatTutari: roundMoney(t.tutar).toString(),
-      dagitilabilir: tahsilatDagitilabilirKalan(
-        t.tutar.toString(),
-        t.islemOdemeleri.map((o) => o.tutar.toString())
+  return cekler
+    .map((c) => ({
+      cekSenetId: c.id,
+      aciklama: c.aciklama,
+      vadeTarihi: c.vadeTarihi,
+      tutar: roundMoney(c.tutar).toString(),
+      dagitilabilir: cekDagitilabilirKalan(
+        c.tutar.toString(),
+        c.islemOdemeleri.map((o) => o.tutar.toString())
       ),
     }))
-    .filter((t) => toDecimal(t.dagitilabilir).greaterThan(0));
+    .filter((c) => toDecimal(c.dagitilabilir).greaterThan(0));
 }
 
 export type OdemeYaziVerisi = {
   tutar: string;
   tarih: Date;
   kaynak: OdemeKaynagiValue;
-  /** Kaynak CEK_TAHSILATI ise zorunlu. */
-  cekSenetTahsilatId?: string;
+  /** Kaynak CEK ise zorunlu. */
+  cekSenetId?: string;
   /**
    * Paranın gireceği/çıkacağı kasa/banka hesabı. YALNIZCA DIREKT ödemede
-   * anlamlıdır: çek tahsilatından doğan ödemede para kasaya tahsilat
-   * kaydedilirken zaten girmiştir, ikinci kez girseydi kasa şişerdi.
+   * anlamlıdır: çeke bağlanan ödemede para kasaya çek TAHSİL EDİLİRKEN girer,
+   * burada da girseydi kasa şişerdi.
    */
   hesapId?: string;
   aciklama?: string;
@@ -163,26 +157,31 @@ export async function odemeEkle(
     );
     if (!kontrol.gecerli) throw new Error(kontrol.hata);
 
-    if (veri.kaynak === "CEK_TAHSILATI") {
-      if (!veri.cekSenetTahsilatId) {
-        throw new Error("Çek tahsilatı seçin.");
+    if (veri.kaynak === "CEK") {
+      if (!veri.cekSenetId) {
+        throw new Error("Çek/senet seçin.");
       }
-      const tahsilat = await tx.cekSenetTahsilat.findUnique({
-        where: { id: veri.cekSenetTahsilatId },
+      const cek = await tx.cekSenet.findUnique({
+        where: { id: veri.cekSenetId },
         select: {
           tutar: true,
-          cekSenet: { select: { cariId: true } },
+          cariId: true,
+          durum: true,
           islemOdemeleri: { select: { tutar: true } },
         },
       });
-      if (!tahsilat) throw new Error("Tahsilat bulunamadı.");
-      if (tahsilat.cekSenet.cariId !== islem.cariId) {
-        throw new Error("Tahsilat, işlemin carisine ait değil.");
+      if (!cek) throw new Error("Çek/senet bulunamadı.");
+      if (cek.cariId !== islem.cariId) {
+        throw new Error("Çek/senet, işlemin carisine ait değil.");
+      }
+      // Yanan çek bir faturayı kapatamaz; borç zaten geri gelmiştir.
+      if (cek.durum === "KARSILIKSIZ") {
+        throw new Error("Karşılıksız çek bir faturaya sayılamaz.");
       }
 
-      const dagitim = tahsilatDagitimKontrol(
-        tahsilat.tutar.toString(),
-        tahsilat.islemOdemeleri.map((o) => o.tutar.toString()),
+      const dagitim = cekDagitimKontrol(
+        cek.tutar.toString(),
+        cek.islemOdemeleri.map((o) => o.tutar.toString()),
         veri.tutar
       );
       if (!dagitim.gecerli) throw new Error(dagitim.hata);
@@ -208,8 +207,7 @@ export async function odemeEkle(
         tutar: tutar.toString(),
         tarih: veri.tarih,
         kaynak: veri.kaynak,
-        cekSenetTahsilatId:
-          veri.kaynak === "CEK_TAHSILATI" ? veri.cekSenetTahsilatId : null,
+        cekSenetId: veri.kaynak === "CEK" ? veri.cekSenetId : null,
         hesapHareketiId: hareket?.id ?? null,
         aciklama: veri.aciklama ?? null,
       },

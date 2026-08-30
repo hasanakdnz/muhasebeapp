@@ -104,22 +104,22 @@ describe("odemeSchema — kullanıcı biçimini kanonik Decimal'e çevirir", () 
     expect(odemeSchema.safeParse({ ...temel, tutar: "-100" }).success).toBe(false);
   });
 
-  it("çek tahsilatı seçilmeden kaynak CEK_TAHSILATI olamaz", () => {
+  it("çek seçilmeden kaynak CEK olamaz", () => {
     const r = odemeSchema.safeParse({
       tarih: "2026-08-29",
-      kaynak: "CEK_TAHSILATI",
+      kaynak: "CEK",
       tutar: "100",
     });
     expect(r.success).toBe(false);
-    expect(r.error?.issues[0]?.message).toMatch(/tahsilatı seçin/i);
+    expect(r.error?.issues[0]?.message).toMatch(/çek\/senet seçin/i);
   });
 
-  it("tahsilat seçilince kabul eder", () => {
+  it("çek seçilince kabul eder", () => {
     const r = odemeSchema.safeParse({
       tarih: "2026-08-29",
-      kaynak: "CEK_TAHSILATI",
+      kaynak: "CEK",
       tutar: "100",
-      cekSenetTahsilatId: "abc123",
+      cekSenetId: "abc123",
     });
     expect(r.success).toBe(true);
   });

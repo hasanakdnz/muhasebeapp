@@ -25,7 +25,7 @@ import {
   ODEME_KAYNAK_ETIKETI,
   type OdemeKaynagiValue,
 } from "@/lib/domain/odeme";
-import type { KullanilabilirTahsilat, OdemeSatiri } from "@/lib/odeme";
+import type { KullanilabilirCek, OdemeSatiri } from "@/lib/odeme";
 import { createOdeme, deleteOdeme } from "@/app/(dashboard)/islemler/actions";
 
 /**
@@ -33,8 +33,8 @@ import { createOdeme, deleteOdeme } from "@/app/(dashboard)/islemler/actions";
  *
  * Ödemenin KAYNAĞI kritiktir:
  *  - "Nakit / Banka" cari bakiyesini düşürür.
- *  - "Çek tahsilatı" bakiyeyi ETKİLEMEZ; o para tahsilat kaydedilirken zaten
- *    düşülmüştür. Buradaki kayıt "bu tahsilat hangi faturaya sayıldı"
+ *  - "Çek / Senet" bakiyeyi ETKİLEMEZ; borç çek ALINDIĞINDA zaten
+ *    kapanmıştı. Buradaki kayıt "bu çek hangi faturayı kapattı"
  *    bilgisidir. Bu ayrım kullanıcıya da açıkça yazılır.
  */
 export type HesapSecenegi = { id: string; ad: string };
@@ -45,7 +45,7 @@ export function OdemePaneli({
   kalanTutar,
   status,
   odemeler,
-  tahsilatlar,
+  cekler,
   hesaplar,
   bugun,
   yonetici,
@@ -55,7 +55,7 @@ export function OdemePaneli({
   kalanTutar: string;
   status: string;
   odemeler: OdemeSatiri[];
-  tahsilatlar: KullanilabilirTahsilat[];
+  cekler: KullanilabilirCek[];
   hesaplar: HesapSecenegi[];
   bugun: string;
   yonetici: boolean;
@@ -64,7 +64,7 @@ export function OdemePaneli({
   const [tutar, setTutar] = React.useState("");
   const [tarih, setTarih] = React.useState(bugun);
   const [kaynak, setKaynak] = React.useState<OdemeKaynagiValue>("DIREKT");
-  const [tahsilatId, setTahsilatId] = React.useState("");
+  const [cekId, setCekId] = React.useState("");
   const [hesapId, setHesapId] = React.useState("");
   const [aciklama, setAciklama] = React.useState("");
   const [hata, setHata] = React.useState<string | null>(null);
@@ -80,10 +80,9 @@ export function OdemePaneli({
         tutar,
         tarih,
         kaynak,
-        cekSenetTahsilatId:
-          kaynak === "CEK_TAHSILATI" ? tahsilatId || undefined : undefined,
-        // Çek tahsilatından doğan ödemede para kasaya tahsilat anında girdi;
-        // hesap gönderilseydi ikinci kez girer, kasa şişerdi.
+        cekSenetId: kaynak === "CEK" ? cekId || undefined : undefined,
+        // Çeke bağlanan ödemede para kasaya çek TAHSİL EDİLİRKEN girer;
+        // hesap burada da gönderilseydi ikinci kez girer, kasa şişerdi.
         hesapId: kaynak === "DIREKT" ? hesapId || undefined : undefined,
         aciklama: aciklama || undefined,
       });
@@ -93,7 +92,7 @@ export function OdemePaneli({
       }
       setTutar("");
       setAciklama("");
-      setTahsilatId("");
+      setCekId("");
       setHesapId("");
       router.refresh();
     });
@@ -195,40 +194,40 @@ export function OdemePaneli({
             </Field>
           )}
 
-          {kaynak === "CEK_TAHSILATI" && (
+          {kaynak === "CEK" && (
             <div className="flex flex-col gap-2">
               <Field
-                id="odemeTahsilat"
-                label="Hangi tahsilattan"
-                hint="Bu carinin faturalara henüz sayılmamış tahsilatları."
+                id="odemeCek"
+                label="Hangi çek/senet"
+                hint="Bu carinin faturalara henüz sayılmamış çek/senetleri."
               >
                 <Select
-                  id="odemeTahsilat"
-                  value={tahsilatId}
-                  onChange={(e) => setTahsilatId(e.target.value)}
+                  id="odemeCek"
+                  value={cekId}
+                  onChange={(e) => setCekId(e.target.value)}
                 >
                   <option value="">Seçin…</option>
-                  {tahsilatlar.map((t) => (
-                    <option key={t.tahsilatId} value={t.tahsilatId}>
-                      {formatTarih(t.tahsilatTarihi)} ·{" "}
-                      {t.cekSenetAciklamasi ?? "Çek/senet"} · dağıtılabilir{" "}
-                      {formatTRY(t.dagitilabilir)}
+                  {cekler.map((c) => (
+                    <option key={c.cekSenetId} value={c.cekSenetId}>
+                      vade {formatTarih(c.vadeTarihi)} ·{" "}
+                      {c.aciklama ?? "Çek/senet"} · dağıtılabilir{" "}
+                      {formatTRY(c.dagitilabilir)}
                     </option>
                   ))}
                 </Select>
               </Field>
-              {tahsilatlar.length === 0 && (
+              {cekler.length === 0 && (
                 <p className="text-body-sm text-muted">
-                  Bu carinin dağıtılabilir tahsilatı yok.{" "}
+                  Bu carinin dağıtılabilir çek/senedi yok.{" "}
                   <Link href="/cek-senet" className="underline underline-offset-2">
                     Çek/senet ekranından
                   </Link>{" "}
-                  tahsilat kaydedebilirsiniz.
+                  kayıt ekleyebilirsiniz.
                 </p>
               )}
               <p className="text-body-sm text-muted">
-                Çek tahsilatı cari bakiyesini zaten düşürmüştür; bu kayıt yalnızca
-                tahsilatın hangi faturaya sayıldığını belirler, bakiyeyi tekrar
+                Çek alındığında cari bakiyesi zaten kapanmıştı; bu kayıt yalnızca
+                çekin hangi faturayı kapattığını belirler, bakiyeyi tekrar
                 değiştirmez.
               </p>
             </div>
@@ -240,7 +239,7 @@ export function OdemePaneli({
               disabled={
                 pending ||
                 !tutar ||
-                (kaynak === "CEK_TAHSILATI" && !tahsilatId)
+                (kaynak === "CEK" && !cekId)
               }
             >
               <Plus />
@@ -276,7 +275,7 @@ export function OdemePaneli({
                   {formatTarih(odeme.tarih)}
                 </LedgerCell>
                 <LedgerCell className="text-muted">
-                  {odeme.kaynak === "CEK_TAHSILATI" && odeme.cekSenetId ? (
+                  {odeme.kaynak === "CEK" && odeme.cekSenetId ? (
                     <Link
                       href={`/cek-senet/${odeme.cekSenetId}`}
                       className="underline underline-offset-2"
@@ -317,8 +316,8 @@ export function OdemePaneli({
         open={silinecek !== null}
         title="Ödeme silinsin mi?"
         description={
-          silinecek?.kaynak === "CEK_TAHSILATI"
-            ? "Eşleştirme kaldırılacak; para tahsil edilmiş olarak kalır ve cari bakiyesi değişmez."
+          silinecek?.kaynak === "CEK"
+            ? "Eşleştirme kaldırılacak; çek kaydı ve cari bakiyesi değişmez, fatura yeniden açık görünür."
             : "Ödeme silinecek ve cari bakiyesi buna göre geri alınacak."
         }
         confirmLabel="Sil"

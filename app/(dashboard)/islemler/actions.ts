@@ -112,7 +112,9 @@ function isKuraliHatasi(error: unknown): ActionResult | null {
     "sıfırdan büyük olmalı",
     "dağıtılabilecek tutar",
     "carisine ait değil",
-    "Çek tahsilatı seçin",
+    "Çek/senet seçin",
+    "carisine ait değil",
+    "sayılamaz",
     "ödeme kaydedilemez",
     "bulunamadı",
   ];
@@ -143,7 +145,7 @@ export async function createOdeme(
       tutar: parsed.data.tutar,
       tarih: parsed.data.tarih,
       kaynak: parsed.data.kaynak,
-      cekSenetTahsilatId: parsed.data.cekSenetTahsilatId,
+      cekSenetId: parsed.data.cekSenetId,
       hesapId: parsed.data.hesapId,
       aciklama: parsed.data.aciklama,
     });

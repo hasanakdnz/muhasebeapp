@@ -48,7 +48,10 @@ enum ProformaDurumu {
 
 enum OdemeKaynagi {
   DIREKT
-  CEK_TAHSILATI
+  /// Faturayi kapatan sey CEKIN KENDISIDIR, tahsilati degil: cek ele
+  /// gectiginde cari hesap kapanir, tahsilat sonradan gelen bir kasa
+  /// olayidir. Onceki CEK_TAHSILATI degeri bu yuzden kaldirildi.
+  CEK
 }
 
 enum CekSenetTipi {
@@ -158,15 +161,15 @@ model IslemOdeme {
   /// kalkarken para kasada asili kalirdi.
   hesapHareketiId String?        @unique
   hesapHareketi   HesapHareketi? @relation(fields: [hesapHareketiId], references: [id], onDelete: SetNull)
-  /// Kaynak CEK_TAHSILATI ise hangi tahsilattan geldiği. Bir tahsilatın
-  /// faturalara dağıtılan toplamı, tahsilat tutarını aşamaz.
-  cekSenetTahsilatId String?
-  cekSenetTahsilat   CekSenetTahsilat? @relation(fields: [cekSenetTahsilatId], references: [id], onDelete: Restrict)
+  /// Kaynak CEK ise hangi cek/senet bu faturayi kapatiyor. Bir cekin
+  /// faturalara dagitilan toplami, cek tutarini asamaz.
+  cekSenetId String?
+  cekSenet   CekSenet? @relation(fields: [cekSenetId], references: [id], onDelete: Restrict)
   aciklama  String?
   createdAt DateTime @default(now())
 
   @@index([islemId])
-  @@index([cekSenetTahsilatId])
+  @@index([cekSenetId])
   @@index([tarih])
 }
 
@@ -249,6 +252,8 @@ model CekSenet {
   karsiliksizTarihi DateTime?
   aciklama     String?
   tahsilatlar  CekSenetTahsilat[]
+  /// Bu cekin kapattigi faturalar (kismen dagitilabilir).
+  islemOdemeleri IslemOdeme[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -272,8 +277,7 @@ model CekSenetTahsilat {
   /// Tahsil edilen paranin girdigi kasa/banka hareketi.
   hesapHareketiId String?        @unique
   hesapHareketi   HesapHareketi? @relation(fields: [hesapHareketiId], references: [id], onDelete: SetNull)
-  /// Bu tahsilatın hangi faturalara sayıldığı (kısmen dağıtılabilir).
-  islemOdemeleri IslemOdeme[]
+
   createdAt  DateTime @default(now())
 
   @@index([cekSenetId])

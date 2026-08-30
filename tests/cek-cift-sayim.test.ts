@@ -9,7 +9,7 @@ import {
 } from "@/lib/cek-senet";
 import { hesaplaPortfoyOzeti } from "@/lib/domain/cek-senet";
 import { islemOlustur } from "@/lib/islem";
-import { kullanilabilirTahsilatlar, odemeEkle } from "@/lib/odeme";
+import { kullanilabilirCekler, odemeEkle } from "@/lib/odeme";
 
 /**
  * Regresyon: cari bakiyesi ile çek portföyü AYNI parayı iki kez göstermemeli.
@@ -255,7 +255,7 @@ describe("Fatura ödemesi çek tahsilatına bağlanınca", () => {
 
     await tahsilatEkle(cek.id, { tutar: "6000", tarih: gun(10) }, db.prisma);
 
-    const secenekler = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    const secenekler = await kullanilabilirCekler(cari.id, db.prisma);
     expect(secenekler).toHaveLength(1);
 
     await odemeEkle(
@@ -263,8 +263,8 @@ describe("Fatura ödemesi çek tahsilatına bağlanınca", () => {
       {
         tutar: "6000",
         tarih: gun(10),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: secenekler[0].tahsilatId,
+        kaynak: "CEK",
+        cekSenetId: secenekler[0].cekSenetId,
       },
       db.prisma
     );

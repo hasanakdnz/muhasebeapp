@@ -67,6 +67,7 @@ function isKuraliHatasi(error: unknown): ActionResult | null {
     "altına düşürülemez",
     "karşılıksız olarak işaretlenemez",
     "sıfırdan büyük olmalı",
+    "eşleştirmesini kaldırın",
     "bulunamadı",
   ];
   return bilinen.some((k) => error.message.includes(k))

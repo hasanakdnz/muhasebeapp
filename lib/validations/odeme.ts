@@ -18,15 +18,15 @@ export const odemeSchema = z
     tutar: tutarAlani({ zorunlu: true, pozitif: true, label: "Ödeme tutarı" }),
     tarih: tarihAlani,
     kaynak: z.enum(ODEME_KAYNAKLARI, { message: "Ödeme kaynağı seçin." }),
-    cekSenetTahsilatId: optionalText(64, "Tahsilat"),
+    cekSenetId: optionalText(64, "Çek/Senet"),
     /** Paranın gireceği/çıkacağı hesap; boş bırakılırsa kasa hareketi oluşmaz. */
     hesapId: optionalText(64, "Hesap"),
     aciklama: optionalText(200, "Açıklama"),
   })
-  .refine(
-    (v) => v.kaynak !== "CEK_TAHSILATI" || Boolean(v.cekSenetTahsilatId),
-    { message: "Çek tahsilatı seçin.", path: ["cekSenetTahsilatId"] }
-  );
+  .refine((v) => v.kaynak !== "CEK" || Boolean(v.cekSenetId), {
+    message: "Çek/senet seçin.",
+    path: ["cekSenetId"],
+  });
 
 export type OdemeInput = z.input<typeof odemeSchema>;
 export type OdemeOutput = z.output<typeof odemeSchema>;

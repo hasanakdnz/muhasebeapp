@@ -4,21 +4,27 @@ import { roundMoney, toDecimal, type DecimalLike } from "@/lib/money";
  * Fatura ödemesi mantığı — saf, Prisma'sız, doğrudan test edilebilir.
  *
  * ## Çift sayım tehlikesi (bu modülün varlık sebebi)
- * Cari bakiyesi zaten çek tahsilatlarından etkileniyor. Eğer o tahsilattan
- * doğan fatura ödemesi de bakiyeyi düşürseydi, çekle ödenen bir fatura
- * bakiyeyi İKİ KEZ azaltırdı. Bu yüzden:
+ * Cari bakiyesi çek ALINDIĞINDA zaten değişiyor. Eğer o çeke bağlanan fatura
+ * ödemesi de bakiyeyi düşürseydi, çekle kapanan bir fatura bakiyeyi İKİ KEZ
+ * azaltırdı. Bu yüzden:
  *
  *  - `DIREKT` ödeme (nakit/banka): cari bakiyesini DÜŞÜRÜR.
- *  - `CEK_TAHSILATI` kaynaklı ödeme: bakiyeyi ETKİLEMEZ; yalnızca "bu para
- *    hangi faturaya sayıldı" bilgisidir (dağıtım/eşleştirme kaydı).
+ *  - `CEK` kaynaklı ödeme: bakiyeyi ETKİLEMEZ; yalnızca "bu çek hangi
+ *    faturayı kapattı" bilgisidir (dağıtım/eşleştirme kaydı).
+ *
+ * Faturayı kapatan şey ÇEKİN KENDİSİDİR, tahsilatı değil: çek ele geçtiğinde
+ * cari hesap kapanır, tahsilat sonradan gelen bir kasa olayıdır. Önceki
+ * `CEK_TAHSILATI` kaynağı bu yüzden kaldırıldı — aksi halde fatura, çek
+ * tahsil edilene kadar "bekliyor" kalır ve yaşlandırma raporu çekle kapanmış
+ * bir alacağı gecikmiş gösterirdi.
  */
 
-export const ODEME_KAYNAKLARI = ["DIREKT", "CEK_TAHSILATI"] as const;
+export const ODEME_KAYNAKLARI = ["DIREKT", "CEK"] as const;
 export type OdemeKaynagiValue = (typeof ODEME_KAYNAKLARI)[number];
 
 export const ODEME_KAYNAK_ETIKETI: Record<OdemeKaynagiValue, string> = {
   DIREKT: "Nakit / Banka",
-  CEK_TAHSILATI: "Çek tahsilatı",
+  CEK: "Çek / Senet",
 };
 
 export const ODEME_STATUSLERI = [
@@ -116,30 +122,28 @@ export function odemeKontrol(
 }
 
 /**
- * Bir çek tahsilatından faturalara dağıtılabilecek kalan tutar.
- * Tahsilatın faturalara sayılan toplamı, tahsilat tutarını aşamaz.
+ * Bir çekten faturalara dağıtılabilecek kalan tutar.
+ * Çekin faturalara sayılan toplamı, çek tutarını aşamaz.
  */
-export function tahsilatDagitilabilirKalan(
-  tahsilatTutari: DecimalLike,
+export function cekDagitilabilirKalan(
+  cekTutari: DecimalLike,
   dagitilanlar: DecimalLike[]
 ): string {
   let dagitilan = toDecimal(0);
   for (const d of dagitilanlar) dagitilan = dagitilan.plus(roundMoney(d));
-  return roundMoney(tahsilatTutari).minus(dagitilan).toString();
+  return roundMoney(cekTutari).minus(dagitilan).toString();
 }
 
-export function tahsilatDagitimKontrol(
-  tahsilatTutari: DecimalLike,
+export function cekDagitimKontrol(
+  cekTutari: DecimalLike,
   dagitilanlar: DecimalLike[],
   yeniTutar: DecimalLike
 ): OdemeKontrolu {
-  const kalan = toDecimal(
-    tahsilatDagitilabilirKalan(tahsilatTutari, dagitilanlar)
-  );
+  const kalan = toDecimal(cekDagitilabilirKalan(cekTutari, dagitilanlar));
   if (roundMoney(yeniTutar).greaterThan(kalan)) {
     return {
       gecerli: false,
-      hata: "Bu tahsilattan faturalara dağıtılabilecek tutar aşılıyor.",
+      hata: "Bu çekten faturalara dağıtılabilecek tutar aşılıyor.",
     };
   }
   return { gecerli: true };
@@ -148,9 +152,9 @@ export function tahsilatDagitimKontrol(
 /**
  * Bir ödemenin cari bakiyesine etkisi.
  *
- * KRİTİK: yalnızca DIREKT ödemeler bakiyeyi etkiler. Çek tahsilatından gelen
- * ödeme bir dağıtım kaydıdır; parası tahsilat kaydedilirken zaten bakiyeden
- * düşülmüştür (bkz. lib/domain/cek-senet.ts cariEtkisi).
+ * KRİTİK: yalnızca DIREKT ödemeler bakiyeyi etkiler. Çeke bağlanan ödeme bir
+ * dağıtım kaydıdır; borç, çek ele geçtiğinde zaten kapanmıştı (bkz.
+ * lib/domain/cek-senet.ts cekCariEtkisi).
  */
 export function odemeCariEtkisi(
   islemTipi: "SATIS" | "ALIS",

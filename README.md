@@ -187,10 +187,21 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   edilmemiş ALINAN çek ciro edilebilir.
 - **Fatura ödemeleri ve ÇİFT SAYIM koruması:** `Islem.odenenTutar` = Σ IslemOdeme
   ve `status` bundan türetilir. Ödemenin cari bakiyesine etkisi KAYNAĞINA bağlıdır:
-  `DIREKT` (nakit/banka) bakiyeyi düşürür; `CEK_TAHSILATI` kaynaklı ödeme
-  bakiyeyi ETKİLEMEZ — o borç çek alındığında zaten kapanmıştı, tekrar
-  düşülseydi çekle ödenen fatura bakiyeyi iki kez azaltırdı. Bir tahsilat
-  birden fazla faturaya bölüştürülebilir; dağıtılan toplam tahsilat tutarını aşamaz.
+  `DIREKT` (nakit/banka) bakiyeyi düşürür; `CEK` kaynaklı ödeme bakiyeyi
+  ETKİLEMEZ — o borç çek alındığında zaten kapanmıştı, tekrar düşülseydi çekle
+  ödenen fatura bakiyeyi iki kez azaltırdı. Bir çek birden fazla faturaya
+  bölüştürülebilir; dağıtılan toplam çek tutarını aşamaz.
+
+  **Faturayı kapatan şey ÇEKİN KENDİSİDİR, tahsilatı değil.** Önceki
+  `CEK_TAHSILATI` kaynağı bu yüzden kaldırıldı: çek modeli "alındığı anda işle"ye
+  geçtiğinde cari hesap kapanıyor ama fatura, çek tahsil edilene kadar
+  "bekliyor" kalıyordu — yaşlandırma raporu çekle kapanmış bir alacağı gecikmiş
+  gösteriyordu. Artık çek doğrudan faturaya sayılır; tahsilat yalnızca kasa
+  olayıdır.
+
+  Eşleştirilmiş çek korunur: faturaya sayılmış bir çek karşılıksız
+  işaretlenemez ve silinemez (önce eşleştirme kaldırılmalı). İzin verilseydi
+  borç cariye geri dönerken fatura "ödendi" kalır, iki defter ayrışırdı.
 - **Kasa/Banka entegrasyonu:** Çek tahsilatı, DİREKT fatura ödemesi ve gider,
   seçilen hesapta AYNI transaction içinde bir `HesapHareketi` üretir. Önce
   hiçbiri kasaya dokunmuyordu; kullanıcı aynı parayı iki kez girmek zorundaydı
@@ -228,13 +239,6 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   düşerdi. Aynı gerekçeyle karşılıksız işaretleme tarihi de saklanır
   (`karsiliksizTarihi`); `updatedAt` kullanılsaydı çekin herhangi bir alanı
   düzenlendiğinde ekstredeki geri dönüş satırı yer değiştirirdi.
-
-  > **Bilinen sınır.** Çek bir faturayı kapatsa da fatura kaydı "bekliyor"
-  > kalır: cari hesap (hesap düzeyi) ile fatura ödeme durumu (belge düzeyi)
-  > yalnızca `IslemOdeme` üzerinden bağlanır ve çek böyle bir kayıt üretmez.
-  > Sonuç: yaşlandırma raporu, çekle kapanmış bir faturayı hâlâ açık gösterir.
-  > Bu, çek modelinden önce de vardı (tahsilat anında aynı ayrışma oluşuyordu).
-  > Doğru çözüm, fatura ödemesine `CEK` kaynağı eklemektir.
 
 - **Cari bakiyesinin dört kaynağı vardır:** satış/alış işlemleri, bu cariye ait
   çek/senet KAYITLARI, bu cariye ciro edilmiş çekler ve DİREKT fatura ödemeleri.

@@ -252,7 +252,7 @@ describe("Fatura ödemesi kasaya girer", () => {
       },
       db.prisma
     );
-    const t = await tahsilatEkle(
+    await tahsilatEkle(
       cek.id,
       { tutar: "7000", tarih: gun(10), hesapId: kasa.id },
       db.prisma
@@ -265,8 +265,8 @@ describe("Fatura ödemesi kasaya girer", () => {
       {
         tutar: "7000",
         tarih: gun(10),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: t.id,
+        kaynak: "CEK",
+        cekSenetId: cek.id,
         hesapId: kasa.id,
       },
       db.prisma

@@ -5,7 +5,7 @@ import { cekSenetOlustur, tahsilatEkle } from "@/lib/cek-senet";
 import { getIslem, islemOlustur, islemSil } from "@/lib/islem";
 import {
   islemOdemesiniDogrula,
-  kullanilabilirTahsilatlar,
+  kullanilabilirCekler,
   listeleOdemeler,
   odemeEkle,
   odemeSil,
@@ -165,12 +165,12 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
     );
     await tahsilatEkle(cek.id, { tutar: "12000", tarih: gun(20) }, db.prisma);
 
-    // Tahsilat bakiyeyi kapattı; fatura ise hâlâ "bekliyor".
+    // Çek bakiyeyi kapattı; fatura ise hâlâ "bekliyor".
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
     expect((await getIslem(islem.id, db.prisma))?.status).toBe("BEKLIYOR");
 
-    // Şimdi tahsilat faturaya eşleştiriliyor.
-    const musait = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    // Şimdi çek faturaya eşleştiriliyor.
+    const musait = await kullanilabilirCekler(cari.id, db.prisma);
     expect(musait).toHaveLength(1);
     expect(musait[0].dagitilabilir).toBe("12000");
 
@@ -179,8 +179,8 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
       {
         tutar: "12000",
         tarih: gun(20),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: musait[0].tahsilatId,
+        kaynak: "CEK",
+        cekSenetId: musait[0].cekSenetId,
       },
       db.prisma
     );
@@ -209,15 +209,15 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
     );
     await tahsilatEkle(cek.id, { tutar: "20000", tarih: gun(20) }, db.prisma);
 
-    const [musait] = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    const [musait] = await kullanilabilirCekler(cari.id, db.prisma);
 
     await odemeEkle(
       islem1.id,
       {
         tutar: "12000",
         tarih: gun(20),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: musait.tahsilatId,
+        kaynak: "CEK",
+        cekSenetId: musait.cekSenetId,
       },
       db.prisma
     );
@@ -226,8 +226,8 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
       {
         tutar: "8000",
         tarih: gun(20),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: musait.tahsilatId,
+        kaynak: "CEK",
+        cekSenetId: musait.cekSenetId,
       },
       db.prisma
     );
@@ -237,7 +237,7 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
     expect((await getIslem(islem2.id, db.prisma))?.kalanTutar).toBe("4000");
 
     // Tahsilat tamamen dağıtıldı.
-    const kalanMusait = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    const kalanMusait = await kullanilabilirCekler(cari.id, db.prisma);
     expect(kalanMusait).toHaveLength(0);
   });
 
@@ -256,7 +256,7 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
       db.prisma
     );
     await tahsilatEkle(cek.id, { tutar: "5000", tarih: gun(20) }, db.prisma);
-    const [musait] = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    const [musait] = await kullanilabilirCekler(cari.id, db.prisma);
 
     await expect(
       odemeEkle(
@@ -264,8 +264,8 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
         {
           tutar: "5000.01",
           tarih: gun(20),
-          kaynak: "CEK_TAHSILATI",
-          cekSenetTahsilatId: musait.tahsilatId,
+          kaynak: "CEK",
+          cekSenetId: musait.cekSenetId,
         },
         db.prisma
       )
@@ -288,7 +288,7 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
       db.prisma
     );
     await tahsilatEkle(cekB.id, { tutar: "5000", tarih: gun(20) }, db.prisma);
-    const [musaitB] = await kullanilabilirTahsilatlar(cariB.id, db.prisma);
+    const [musaitB] = await kullanilabilirCekler(cariB.id, db.prisma);
 
     await expect(
       odemeEkle(
@@ -296,8 +296,8 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
         {
           tutar: "5000",
           tarih: gun(20),
-          kaynak: "CEK_TAHSILATI",
-          cekSenetTahsilatId: musaitB.tahsilatId,
+          kaynak: "CEK",
+          cekSenetId: musaitB.cekSenetId,
         },
         db.prisma
       )
@@ -318,15 +318,15 @@ describe("Çek tahsilatının faturaya eşleştirilmesi — ÇİFT SAYIM korumas
       db.prisma
     );
     await tahsilatEkle(cek.id, { tutar: "12000", tarih: gun(20) }, db.prisma);
-    const [musait] = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    const [musait] = await kullanilabilirCekler(cari.id, db.prisma);
 
     const odeme = await odemeEkle(
       islem.id,
       {
         tutar: "12000",
         tarih: gun(20),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: musait.tahsilatId,
+        kaynak: "CEK",
+        cekSenetId: musait.cekSenetId,
       },
       db.prisma
     );
@@ -368,14 +368,14 @@ describe("Karışık senaryo", () => {
     await tahsilatEkle(cek.id, { tutar: "8000", tarih: gun(20) }, db.prisma);
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
 
-    const [musait] = await kullanilabilirTahsilatlar(cari.id, db.prisma);
+    const [musait] = await kullanilabilirCekler(cari.id, db.prisma);
     await odemeEkle(
       islem.id,
       {
         tutar: "8000",
         tarih: gun(20),
-        kaynak: "CEK_TAHSILATI",
-        cekSenetTahsilatId: musait.tahsilatId,
+        kaynak: "CEK",
+        cekSenetId: musait.cekSenetId,
       },
       db.prisma
     );
@@ -387,7 +387,7 @@ describe("Karışık senaryo", () => {
     expect((await cariBakiyesiniDogrula(cari.id, db.prisma)).mutabik).toBe(true);
 
     const odemeler = await listeleOdemeler(islem.id, db.prisma);
-    expect(odemeler.map((o) => o.kaynak)).toEqual(["DIREKT", "CEK_TAHSILATI"]);
+    expect(odemeler.map((o) => o.kaynak)).toEqual(["DIREKT", "CEK"]);
   });
 
   it("işlem silinince direkt ödemelerin bakiye etkisi de geri alınır", async () => {

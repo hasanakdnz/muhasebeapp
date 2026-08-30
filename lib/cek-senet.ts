@@ -368,9 +368,24 @@ export async function durumDegistir(
   await db.$transaction(async (tx) => {
     const cekSenet = await tx.cekSenet.findUnique({
       where: { id },
-      select: { tutar: true, tahsilEdilen: true, durum: true, cariId: true },
+      select: {
+        tutar: true,
+        tahsilEdilen: true,
+        durum: true,
+        cariId: true,
+        islemOdemeleri: { select: { id: true } },
+      },
     });
     if (!cekSenet) throw new Error("Çek/senet bulunamadı.");
+
+    // Faturaya sayılmış çek karşılıksız işaretlenemez: borç cariye geri
+    // dönerken fatura "ödendi" kalır ve iki defter ayrışırdı. Kullanıcı önce
+    // eşleştirmeyi kaldırmalı.
+    if (yeniDurum === "KARSILIKSIZ" && cekSenet.islemOdemeleri.length > 0) {
+      throw new Error(
+        "Bu çek bir faturaya sayılmış; karşılıksız işaretlemeden önce fatura eşleştirmesini kaldırın."
+      );
+    }
 
     const kontrol = durumDegisikligiKontrol(
       {
@@ -417,9 +432,22 @@ export async function cekSenetSil(id: string, db: Db = prisma): Promise<void> {
   await db.$transaction(async (tx) => {
     const cekSenet = await tx.cekSenet.findUnique({
       where: { id },
-      select: { id: true, cariId: true, ciroEdilenCariId: true },
+      select: {
+        id: true,
+        cariId: true,
+        ciroEdilenCariId: true,
+        islemOdemeleri: { select: { id: true } },
+      },
     });
     if (!cekSenet) throw new Error("Çek/senet bulunamadı.");
+
+    // Şemada onDelete: Restrict var; buradaki kontrol aynı kuralı okunur bir
+    // mesajla uygular — aksi halde kullanıcı ham veritabanı hatası görürdü.
+    if (cekSenet.islemOdemeleri.length > 0) {
+      throw new Error(
+        "Bu çek bir faturaya sayılmış; silmeden önce fatura eşleştirmesini kaldırın."
+      );
+    }
 
     await tx.cekSenet.delete({ where: { id } });
 

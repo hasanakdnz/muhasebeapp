@@ -22,7 +22,7 @@ import { formatTarih, toDateInputValue } from "@/lib/date";
 import { ODEME_STATUS_ETIKETI } from "@/lib/domain/odeme";
 import { ISLEM_TIP_ETIKETI } from "@/lib/domain/islem";
 import { getIslem } from "@/lib/islem";
-import { kullanilabilirTahsilatlar, listeleOdemeler } from "@/lib/odeme";
+import { kullanilabilirCekler, listeleOdemeler } from "@/lib/odeme";
 import { formatTRY } from "@/lib/money";
 
 export const metadata: Metadata = { title: "İşlem · Muhasebe" };
@@ -38,9 +38,9 @@ export default async function IslemDetayPage({
   const islem = await getIslem(id);
   if (!islem) notFound();
 
-  const [odemeler, tahsilatlar, hesaplar] = await Promise.all([
+  const [odemeler, cekler, hesaplar] = await Promise.all([
     listeleOdemeler(islem.id),
-    kullanilabilirTahsilatlar(islem.cariId),
+    kullanilabilirCekler(islem.cariId),
     listeleHesaplar(),
   ]);
 
@@ -130,7 +130,7 @@ export default async function IslemDetayPage({
           kalanTutar={islem.kalanTutar}
           status={islem.status}
           odemeler={odemeler}
-          tahsilatlar={tahsilatlar}
+          cekler={cekler}
           bugun={toDateInputValue(new Date())}
         />
       </Card>
