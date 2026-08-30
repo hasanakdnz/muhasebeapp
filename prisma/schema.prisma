@@ -153,6 +153,11 @@ model IslemOdeme {
   tutar   Decimal
   tarih   DateTime     @default(now())
   kaynak  OdemeKaynagi @default(DIREKT)
+  /// Bu odemeyle kasaya/bankaya giren (veya cikan) para hareketi. Odeme
+  /// silinince ayni transaction'da bu da silinir; aksi halde odeme kaydi
+  /// kalkarken para kasada asili kalirdi.
+  hesapHareketiId String?        @unique
+  hesapHareketi   HesapHareketi? @relation(fields: [hesapHareketiId], references: [id], onDelete: SetNull)
   /// Kaynak CEK_TAHSILATI ise hangi tahsilattan geldiği. Bir tahsilatın
   /// faturalara dağıtılan toplamı, tahsilat tutarını aşamaz.
   cekSenetTahsilatId String?
@@ -202,6 +207,13 @@ model HesapHareketi {
   tutar    Decimal // + giriş, - çıkış
   aciklama String?
   tarih    DateTime  @default(now())
+
+  /// Bu hareketi URETEN kayit. Elle girilen harekette hepsi bostur.
+  /// Kaynagi olan hareket kasa ekranindan tek basina silinemez — silinseydi
+  /// tahsilat/odeme kaydi dururken parasi kasadan kaybolurdu.
+  odeme    IslemOdeme?
+  tahsilat CekSenetTahsilat?
+  gider    Gider?
 
   @@index([hesapId])
   @@index([tarih])
@@ -257,6 +269,9 @@ model CekSenetTahsilat {
   tutar      Decimal
   tarih      DateTime @default(now())
   aciklama   String?
+  /// Tahsil edilen paranin girdigi kasa/banka hareketi.
+  hesapHareketiId String?        @unique
+  hesapHareketi   HesapHareketi? @relation(fields: [hesapHareketiId], references: [id], onDelete: SetNull)
   /// Bu tahsilatın hangi faturalara sayıldığı (kısmen dağıtılabilir).
   islemOdemeleri IslemOdeme[]
   createdAt  DateTime @default(now())
@@ -282,6 +297,9 @@ model Gider {
   belgeUrl  String?
   /// Kullanıcının yüklediği dosyanın özgün adı — indirirken gösterilir.
   belgeAdi  String?
+  /// Giderin odendigi kasa/banka hareketi (cikis).
+  hesapHareketiId String?        @unique
+  hesapHareketi   HesapHareketi? @relation(fields: [hesapHareketiId], references: [id], onDelete: SetNull)
   tarih     DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

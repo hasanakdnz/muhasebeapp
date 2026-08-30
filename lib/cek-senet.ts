@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { cariBakiyesiniYenile } from "@/lib/cari";
+import { hareketSilTx, hareketYaz } from "@/lib/kasa";
+import { tahsilatHareketYonu } from "@/lib/domain/kasa";
 import { roundMoney } from "@/lib/money";
 import {
   ciroKontrol,
@@ -235,7 +237,13 @@ export async function cekSenetGuncelle(
  */
 export async function tahsilatEkle(
   cekSenetId: string,
-  veri: { tutar: string; tarih: Date; aciklama?: string },
+  veri: {
+    tutar: string;
+    tarih: Date;
+    aciklama?: string;
+    /** Paranın gireceği/çıkacağı hesap. Seçilmezse kasa hareketi oluşmaz. */
+    hesapId?: string;
+  },
   db: Db = prisma
 ): Promise<{ id: string }> {
   return db.$transaction(async (tx) => {
@@ -263,12 +271,25 @@ export async function tahsilatEkle(
     if (!kontrol.gecerli) throw new Error(kontrol.hata);
 
     const tutar = roundMoney(veri.tutar);
+
+    // Para AYNI transaction'da kasaya girer: tahsilat kaydedilip kasa
+    // hareketi oluşmasaydı, tahsil edilen para hiçbir hesapta görünmezdi.
+    const hareket = veri.hesapId
+      ? await hareketYaz(tx, veri.hesapId, {
+          yon: tahsilatHareketYonu(cekSenet.yon),
+          tutar: tutar.toString(),
+          tarih: veri.tarih,
+          aciklama: veri.aciklama ?? "Çek/senet tahsilatı",
+        })
+      : null;
+
     const tahsilat = await tx.cekSenetTahsilat.create({
       data: {
         cekSenetId,
         tutar: tutar.toString(),
         tarih: veri.tarih,
         aciklama: veri.aciklama ?? null,
+        hesapHareketiId: hareket?.id ?? null,
       },
       select: { id: true },
     });
@@ -302,6 +323,7 @@ export async function tahsilatSil(
       select: {
         id: true,
         tutar: true,
+        hesapHareketiId: true,
         cekSenet: {
           select: {
             id: true,
@@ -320,6 +342,9 @@ export async function tahsilatSil(
     const tutar = roundMoney(tahsilat.tutar);
 
     await tx.cekSenetTahsilat.delete({ where: { id: tahsilatId } });
+    // Kasadaki karşılığı da gider; aksi halde tahsilat kalkarken parası
+    // hesapta asılı kalırdı.
+    await hareketSilTx(tx, tahsilat.hesapHareketiId);
 
     const yeniTahsilEdilen = roundMoney(cekSenet.tahsilEdilen).minus(tutar);
     await tx.cekSenet.update({

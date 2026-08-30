@@ -37,6 +37,8 @@ import { createOdeme, deleteOdeme } from "@/app/(dashboard)/islemler/actions";
  *    düşülmüştür. Buradaki kayıt "bu tahsilat hangi faturaya sayıldı"
  *    bilgisidir. Bu ayrım kullanıcıya da açıkça yazılır.
  */
+export type HesapSecenegi = { id: string; ad: string };
+
 export function OdemePaneli({
   islemId,
   cariId,
@@ -44,6 +46,7 @@ export function OdemePaneli({
   status,
   odemeler,
   tahsilatlar,
+  hesaplar,
   bugun,
   yonetici,
 }: {
@@ -53,6 +56,7 @@ export function OdemePaneli({
   status: string;
   odemeler: OdemeSatiri[];
   tahsilatlar: KullanilabilirTahsilat[];
+  hesaplar: HesapSecenegi[];
   bugun: string;
   yonetici: boolean;
 }) {
@@ -61,6 +65,7 @@ export function OdemePaneli({
   const [tarih, setTarih] = React.useState(bugun);
   const [kaynak, setKaynak] = React.useState<OdemeKaynagiValue>("DIREKT");
   const [tahsilatId, setTahsilatId] = React.useState("");
+  const [hesapId, setHesapId] = React.useState("");
   const [aciklama, setAciklama] = React.useState("");
   const [hata, setHata] = React.useState<string | null>(null);
   const [silinecek, setSilinecek] = React.useState<OdemeSatiri | null>(null);
@@ -77,6 +82,9 @@ export function OdemePaneli({
         kaynak,
         cekSenetTahsilatId:
           kaynak === "CEK_TAHSILATI" ? tahsilatId || undefined : undefined,
+        // Çek tahsilatından doğan ödemede para kasaya tahsilat anında girdi;
+        // hesap gönderilseydi ikinci kez girer, kasa şişerdi.
+        hesapId: kaynak === "DIREKT" ? hesapId || undefined : undefined,
         aciklama: aciklama || undefined,
       });
       if (sonuc.ok === false) {
@@ -86,6 +94,7 @@ export function OdemePaneli({
       setTutar("");
       setAciklama("");
       setTahsilatId("");
+      setHesapId("");
       router.refresh();
     });
   }
@@ -159,6 +168,32 @@ export function OdemePaneli({
               />
             </Field>
           </div>
+
+          {kaynak === "DIREKT" && (
+            <Field
+              id="odemeHesap"
+              label="Hangi hesaba"
+              hint={
+                hesaplar.length === 0
+                  ? "Kasa/banka hesabı tanımlı değil."
+                  : "Boş bırakılırsa kasa hareketi oluşmaz."
+              }
+            >
+              <Select
+                id="odemeHesap"
+                value={hesapId}
+                disabled={hesaplar.length === 0}
+                onChange={(e) => setHesapId(e.target.value)}
+              >
+                <option value="">Kasaya işleme</option>
+                {hesaplar.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.ad}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
 
           {kaynak === "CEK_TAHSILATI" && (
             <div className="flex flex-col gap-2">

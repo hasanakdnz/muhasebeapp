@@ -191,6 +191,29 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   bakiyeyi ETKİLEMEZ — o borç çek alındığında zaten kapanmıştı, tekrar
   düşülseydi çekle ödenen fatura bakiyeyi iki kez azaltırdı. Bir tahsilat
   birden fazla faturaya bölüştürülebilir; dağıtılan toplam tahsilat tutarını aşamaz.
+- **Kasa/Banka entegrasyonu:** Çek tahsilatı, DİREKT fatura ödemesi ve gider,
+  seçilen hesapta AYNI transaction içinde bir `HesapHareketi` üretir. Önce
+  hiçbiri kasaya dokunmuyordu; kullanıcı aynı parayı iki kez girmek zorundaydı
+  ve nakit akışı raporu gerçeği yansıtmıyordu.
+
+  Yön tek yerde belirlenir (`lib/domain/kasa.ts`): alınan çek tahsilatı ve
+  satış faturası ödemesi GİRİŞ, verilen çek ödemesi ve alış faturası ödemesi
+  ÇIKIŞ, gider daima ÇIKIŞ. Üç modülde tekrarlansaydı biri ters yazıldığında
+  sessizce yanlış bakiye oluşurdu.
+
+  Hesap seçimi **opsiyoneldir**: boş bırakılırsa kasa hareketi oluşmaz ve eski
+  davranış korunur. Zorunlu olsaydı hesap tanımlamamış kullanıcı hiçbir tahsilat
+  giremezdi.
+
+  Kaynak kaydı silinince kasa hareketi de aynı transaction'da silinir; tersi
+  yönde, kaynağı olan bir hareket kasa ekranından **silinemez** (düğme kapalı,
+  sunucu da reddeder) — silinseydi tahsilat kaydı dururken parası kasadan
+  kaybolurdu. Gider güncellenirken hareket sil-yeniden yaz yöntemiyle
+  yenilenir: tutar, tarih ve hesap hepsi değişebilir, hesap eklenmiş ya da
+  kaldırılmış olabilir; tek tek karşılaştırmak dört ayrı durum demekti.
+
+  Çek tahsilatından doğan fatura ödemesi kasaya İKİNCİ kez para sokmaz — o para
+  tahsilat kaydedilirken zaten girmişti.
 - **Cari ekstresi:** Cari kartı bakiyeyi oluşturan HER hareketi kronolojik ve
   yürüyen bakiyeyle gösterir (`cariEkstresiGetir`). Ekstre ile bakiye AYNI
   kaynaktan (`cariHareketleri`) türer — iki ayrı sorgu olsaydı biri güncellenip

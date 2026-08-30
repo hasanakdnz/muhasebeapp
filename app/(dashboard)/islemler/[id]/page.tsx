@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/auth-guards";
 import { PageHeader } from "@/components/layout/page-header";
 import { IslemActions } from "@/components/islem/islem-actions";
 import { OdemePaneli } from "@/components/islem/odeme-panel";
+import { listeleHesaplar } from "@/lib/kasa";
 import { Amount } from "@/components/ui/amount";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -37,9 +38,10 @@ export default async function IslemDetayPage({
   const islem = await getIslem(id);
   if (!islem) notFound();
 
-  const [odemeler, tahsilatlar] = await Promise.all([
+  const [odemeler, tahsilatlar, hesaplar] = await Promise.all([
     listeleOdemeler(islem.id),
     kullanilabilirTahsilatlar(islem.cariId),
+    listeleHesaplar(),
   ]);
 
   const statusVaryanti =
@@ -121,7 +123,8 @@ export default async function IslemDetayPage({
       <Card className="flex flex-col gap-6">
         <CardTitle>Ödemeler</CardTitle>
         <OdemePaneli
-              yonetici={yonetici}
+          yonetici={yonetici}
+          hesaplar={hesaplar}
           islemId={islem.id}
           cariId={islem.cariId}
           kalanTutar={islem.kalanTutar}

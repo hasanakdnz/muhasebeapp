@@ -14,6 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel, CardTitle } from "@/components/ui/card";
 import { listeleCariler } from "@/lib/cari";
 import { getCekSenet } from "@/lib/cek-senet";
+import { listeleHesaplar } from "@/lib/kasa";
 import { formatTarih, toDateInputValue } from "@/lib/date";
 import {
   CEK_SENET_TIP_ETIKETI,
@@ -30,7 +31,11 @@ export default async function CekSenetDetayPage({
   const { id } = await params;
   // Silme yalnızca yöneticide; personel düğmeyi hiç görmez (lib/rbac.ts).
   const yonetici = await isAdmin();
-  const [kayit, cariler] = await Promise.all([getCekSenet(id), listeleCariler()]);
+  const [kayit, cariler, hesaplar] = await Promise.all([
+    getCekSenet(id),
+    listeleCariler(),
+    listeleHesaplar(),
+  ]);
   if (!kayit) notFound();
 
   return (
@@ -119,8 +124,9 @@ export default async function CekSenetDetayPage({
       <Card className="flex flex-col gap-6">
         <CardTitle>Tahsilatlar</CardTitle>
         <TahsilatPaneli
-              yonetici={yonetici}
+          yonetici={yonetici}
           cekSenet={kayit}
+          hesaplar={hesaplar}
           bugun={toDateInputValue(new Date())}
         />
       </Card>

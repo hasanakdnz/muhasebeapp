@@ -144,6 +144,7 @@ export async function createOdeme(
       tarih: parsed.data.tarih,
       kaynak: parsed.data.kaynak,
       cekSenetTahsilatId: parsed.data.cekSenetTahsilatId,
+      hesapId: parsed.data.hesapId,
       aciklama: parsed.data.aciklama,
     });
     odemeId = odeme.id;
@@ -168,6 +169,7 @@ export async function createOdeme(
 
   tazele(cariId);
   revalidatePath(`/islemler/${islemId}`);
+  revalidatePath("/kasa-banka");
   return { ok: true };
 }
 

@@ -137,7 +137,17 @@ export async function deleteHareket(
   if (!yetki.ok) return yetki;
   const user = yetki.user;
 
-  await hareketSil(hareketId);
+  try {
+    await hareketSil(hareketId);
+  } catch (error) {
+    // Kaynağı olan hareket silinemez; kullanıcı çökme ekranı değil, okunur
+    // bir uyarı görmeli.
+    if (error instanceof Error && error.message.includes("tek başına silinemez")) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
+
   await auditKaydet({
     userId: user.id,
     aksiyon: "SIL",

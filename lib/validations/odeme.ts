@@ -19,6 +19,8 @@ export const odemeSchema = z
     tarih: tarihAlani,
     kaynak: z.enum(ODEME_KAYNAKLARI, { message: "Ödeme kaynağı seçin." }),
     cekSenetTahsilatId: optionalText(64, "Tahsilat"),
+    /** Paranın gireceği/çıkacağı hesap; boş bırakılırsa kasa hareketi oluşmaz. */
+    hesapId: optionalText(64, "Hesap"),
     aciklama: optionalText(200, "Açıklama"),
   })
   .refine(

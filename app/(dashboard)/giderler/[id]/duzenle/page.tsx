@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { GiderForm } from "@/components/gider/gider-form";
 import { toDateInputValue } from "@/lib/date";
 import { getGider } from "@/lib/gider";
+import { listeleHesaplar } from "@/lib/kasa";
 import { formatAmount } from "@/lib/money";
 import type { GiderInput } from "@/lib/validations/gider";
 import { updateGider } from "../../actions";
@@ -16,7 +17,7 @@ export default async function GiderDuzenlePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const gider = await getGider(id);
+  const [gider, hesaplar] = await Promise.all([getGider(id), listeleHesaplar()]);
   if (!gider) notFound();
 
   const defaultValues = {
@@ -24,6 +25,7 @@ export default async function GiderDuzenlePage({
     tutar: formatAmount(gider.tutar),
     kdvOrani: gider.kdvOrani,
     aciklama: gider.aciklama ?? "",
+    hesapId: gider.hesapId ?? "",
     tarih: toDateInputValue(gider.tarih),
   } as GiderInput;
 
@@ -32,6 +34,7 @@ export default async function GiderDuzenlePage({
       <PageHeader title="Gideri düzenle" description={gider.kategori} />
       <GiderForm
         defaultValues={defaultValues}
+        hesaplar={hesaplar.map((h) => ({ id: h.id, ad: h.ad }))}
         onSubmitAction={updateGider.bind(null, gider.id)}
         submitLabel="Değişiklikleri kaydet"
         cancelHref={`/giderler/${gider.id}`}

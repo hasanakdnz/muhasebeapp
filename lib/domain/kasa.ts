@@ -103,3 +103,32 @@ export function bakiyeMutabik(
     toDecimal(hesaplaBakiye(hareketTutarlari))
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Otomatik hareketler — tahsilat / ödeme / gider                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Para hareketi ÜRETEN kayıtlar ve yönleri.
+ *
+ * Bu kayıtlar cari/fatura tarafını zaten güncelliyordu ama kasaya hiç
+ * dokunmuyordu; kullanıcı aynı parayı iki kez girmek zorundaydı ve nakit akışı
+ * raporu gerçeği yansıtmıyordu. Yön burada TEK yerde belirlenir — üç ayrı
+ * modülde tekrar edilseydi biri ters yazıldığında sessizce yanlış bakiye
+ * oluşurdu.
+ */
+
+/** Çek/senet tahsilatı: alınan çekte para GİRER, verilen çekte ÇIKAR. */
+export function tahsilatHareketYonu(
+  cekYonu: "ALINAN" | "VERILEN"
+): HareketYonu {
+  return cekYonu === "ALINAN" ? "GIRIS" : "CIKIS";
+}
+
+/** Fatura ödemesi: satış faturasında para GİRER, alış faturasında ÇIKAR. */
+export function odemeHareketYonu(islemTipi: "SATIS" | "ALIS"): HareketYonu {
+  return islemTipi === "SATIS" ? "GIRIS" : "CIKIS";
+}
+
+/** Gider her zaman kasadan ÇIKIŞTIR. */
+export const GIDER_HAREKET_YONU: HareketYonu = "CIKIS";

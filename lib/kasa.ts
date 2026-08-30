@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Tx } from "@/lib/islem";
 import { roundMoney } from "@/lib/money";
 import {
   bakiyeMutabik,
@@ -44,6 +45,11 @@ export type HareketSatiri = {
   tarih: Date;
   /** Bu hareketten SONRAKİ bakiye (ekstre görünümü için). */
   yurutulenBakiye: string;
+  /**
+   * Hareketi üreten bir kayıt (tahsilat / fatura ödemesi / gider) var mı?
+   * Varsa hareket tek başına silinemez; arayüz düğmeyi kapatır.
+   */
+  kaynakEtiketi: string | null;
 };
 
 export type HesapFiltre = {
@@ -106,6 +112,11 @@ export async function listeleHareketler(
     where: { hesapId },
     // Aynı tarihli hareketlerde sıra kaymasın diye id ikincil sıralama.
     orderBy: [{ tarih: "asc" }, { id: "asc" }],
+    include: {
+      odeme: { select: { id: true } },
+      tahsilat: { select: { id: true } },
+      gider: { select: { id: true } },
+    },
   });
 
   const tutarlar = hareketler.map((h) => roundMoney(h.tutar).toString());
@@ -119,6 +130,13 @@ export async function listeleHareketler(
       aciklama: h.aciklama,
       tarih: h.tarih,
       yurutulenBakiye: yuruyen[i],
+      kaynakEtiketi: h.odeme
+        ? "fatura ödemesi"
+        : h.tahsilat
+          ? "çek/senet tahsilatı"
+          : h.gider
+            ? "gider kaydı"
+            : null,
     }))
     .reverse();
 }
@@ -180,45 +198,99 @@ export async function hesapGuncelle(
  * Bakiye, mevcut değere işaretli tutar eklenerek Decimal ile hesaplanır —
  * SQL SUM() kullanılmaz, çünkü SQLite'ta float aritmetiğine düşer.
  */
-export async function hareketEkle(
+export type HareketGirdisi = {
+  yon: HareketYonu;
+  tutar: string;
+  aciklama?: string;
+  tarih: Date;
+};
+
+/**
+ * Hareket yazımının transaction İÇİ gövdesi.
+ *
+ * Ayrı durmasının nedeni: tahsilat, fatura ödemesi ve gider kendi
+ * transaction'larında hem kendi kaydını hem kasa hareketini yazmak zorunda.
+ * Prisma'da transaction iç içe açılamadığı için `hareketEkle` doğrudan
+ * çağrılamıyordu. Mantık burada tek yerde durur; tüm çağıranlar aynı işaret ve
+ * bakiye kurallarını kullanır.
+ */
+export async function hareketYaz(
+  tx: Tx,
   hesapId: string,
-  veri: {
-    yon: HareketYonu;
-    tutar: string;
-    aciklama?: string;
-    tarih: Date;
-  },
-  db: Db = prisma
+  veri: HareketGirdisi
 ): Promise<{ id: string }> {
   const tutar = isaretliTutar(veri.yon, veri.tutar);
 
-  return db.$transaction(async (tx) => {
-    const hesap = await tx.kasaBanka.findUnique({
-      where: { id: hesapId },
-      select: { bakiye: true },
-    });
-    if (!hesap) throw new Error("Hesap bulunamadı.");
+  const hesap = await tx.kasaBanka.findUnique({
+    where: { id: hesapId },
+    select: { bakiye: true },
+  });
+  if (!hesap) throw new Error("Hesap bulunamadı.");
 
-    const hareket = await tx.hesapHareketi.create({
-      data: {
-        hesapId,
-        tutar,
-        aciklama: veri.aciklama ?? null,
-        tarih: veri.tarih,
-      },
-      select: { id: true },
-    });
+  const hareket = await tx.hesapHareketi.create({
+    data: {
+      hesapId,
+      tutar,
+      aciklama: veri.aciklama ?? null,
+      tarih: veri.tarih,
+    },
+    select: { id: true },
+  });
 
-    await tx.kasaBanka.update({
-      where: { id: hesapId },
-      data: { bakiye: bakiyeUygula(hesap.bakiye, tutar) },
-    });
+  await tx.kasaBanka.update({
+    where: { id: hesapId },
+    data: { bakiye: bakiyeUygula(hesap.bakiye, tutar) },
+  });
 
-    return hareket;
+  return hareket;
+}
+
+/**
+ * Kaynak kaydına bağlı hareketi siler ve bakiyeyi geri alır.
+ * `hareketId` boşsa (kullanıcı hesap seçmemişti) hiçbir şey yapmaz.
+ */
+export async function hareketSilTx(
+  tx: Tx,
+  hareketId: string | null | undefined
+): Promise<void> {
+  if (!hareketId) return;
+
+  const hareket = await tx.hesapHareketi.findUnique({
+    where: { id: hareketId },
+    select: { tutar: true, hesapId: true },
+  });
+  if (!hareket) return;
+
+  const hesap = await tx.kasaBanka.findUnique({
+    where: { id: hareket.hesapId },
+    select: { bakiye: true },
+  });
+  if (!hesap) throw new Error("Hesap bulunamadı.");
+
+  await tx.hesapHareketi.delete({ where: { id: hareketId } });
+  await tx.kasaBanka.update({
+    where: { id: hareket.hesapId },
+    data: {
+      bakiye: bakiyeUygula(hesap.bakiye, tersTutar(hareket.tutar.toString())),
+    },
   });
 }
 
-/** Hareketi siler ve bakiyeye ters tutarı uygulayarak eski hâline döndürür. */
+export async function hareketEkle(
+  hesapId: string,
+  veri: HareketGirdisi,
+  db: Db = prisma
+): Promise<{ id: string }> {
+  return db.$transaction((tx) => hareketYaz(tx, hesapId, veri));
+}
+
+/**
+ * Elle girilen hareketi siler ve bakiyeye ters tutarı uygular.
+ *
+ * Kaynağı olan hareket (tahsilat, fatura ödemesi, gider) buradan SİLİNEMEZ:
+ * silinseydi tahsilat kaydı dururken parası kasadan kaybolur, hesap bakiyesi
+ * ile kaynak kayıtlar ayrışırdı. Doğru aksiyon, kaynağın kendisini silmektir.
+ */
 export async function hareketSil(
   hareketId: string,
   db: Db = prisma
@@ -226,9 +298,29 @@ export async function hareketSil(
   await db.$transaction(async (tx) => {
     const hareket = await tx.hesapHareketi.findUnique({
       where: { id: hareketId },
-      select: { id: true, tutar: true, hesapId: true },
+      select: {
+        id: true,
+        tutar: true,
+        hesapId: true,
+        odeme: { select: { id: true } },
+        tahsilat: { select: { id: true } },
+        gider: { select: { id: true } },
+      },
     });
     if (!hareket) throw new Error("Hareket bulunamadı.");
+
+    const kaynak = hareket.odeme
+      ? "fatura ödemesinden"
+      : hareket.tahsilat
+        ? "çek/senet tahsilatından"
+        : hareket.gider
+          ? "gider kaydından"
+          : null;
+    if (kaynak) {
+      throw new Error(
+        `Bu hareket ${kaynak} doğdu ve tek başına silinemez; ilgili kaydı silin.`
+      );
+    }
 
     const hesap = await tx.kasaBanka.findUnique({
       where: { id: hareket.hesapId },

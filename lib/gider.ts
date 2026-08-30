@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { hareketSilTx, hareketYaz } from "@/lib/kasa";
+import { GIDER_HAREKET_YONU } from "@/lib/domain/kasa";
 import { roundMoney } from "@/lib/money";
 import { kdvAyir } from "@/lib/domain/gider";
 import { belgeSil } from "@/lib/storage";
@@ -28,6 +30,8 @@ export type GiderSatiri = {
   belgeUrl: string | null;
   belgeAdi: string | null;
   tarih: Date;
+  /** Paranın çıktığı hesap; kasa hareketi oluşmadıysa null. */
+  hesapId: string | null;
 };
 
 export type GiderFiltre = {
@@ -46,6 +50,7 @@ function satiraCevir(g: {
   belgeUrl: string | null;
   belgeAdi: string | null;
   tarih: Date;
+  hesapHareketi?: { hesapId: string } | null;
 }): GiderSatiri {
   const tutar = roundMoney(String(g.tutar));
   const kdvTutari = roundMoney(String(g.kdvTutari));
@@ -56,6 +61,7 @@ function satiraCevir(g: {
     kdvOrani: String(g.kdvOrani),
     kdvTutari: kdvTutari.toString(),
     matrah: tutar.minus(kdvTutari).toString(),
+    hesapId: g.hesapHareketi?.hesapId ?? null,
     aciklama: g.aciklama,
     belgeUrl: g.belgeUrl,
     belgeAdi: g.belgeAdi,
@@ -88,7 +94,10 @@ export async function getGider(
   id: string,
   db: Db = prisma
 ): Promise<GiderSatiri | null> {
-  const gider = await db.gider.findUnique({ where: { id } });
+  const gider = await db.gider.findUnique({
+    where: { id },
+    include: { hesapHareketi: { select: { hesapId: true } } },
+  });
   return gider ? satiraCevir(gider) : null;
 }
 
@@ -99,6 +108,8 @@ export type GiderYaziVerisi = {
   kdvOrani: string;
   aciklama?: string;
   tarih: Date;
+  /** Paranın çıkacağı kasa/banka hesabı. Seçilmezse kasa hareketi oluşmaz. */
+  hesapId?: string;
 };
 
 /**
@@ -112,24 +123,45 @@ export async function giderOlustur(
   db: Db = prisma
 ): Promise<{ id: string }> {
   const ayrim = kdvAyir(veri.tutar, veri.kdvOrani);
-  return db.gider.create({
-    data: {
-      kategori: veri.kategori,
-      tutar: ayrim.brut,
-      kdvOrani: veri.kdvOrani,
-      kdvTutari: ayrim.kdv,
-      aciklama: veri.aciklama ?? null,
-      tarih: veri.tarih,
-      belgeUrl: belge?.anahtar ?? null,
-      belgeAdi: belge?.ad ?? null,
-    },
-    select: { id: true },
+
+  return db.$transaction(async (tx) => {
+    // Gider parası AYNI transaction'da kasadan çıkar; ayrı yazılsaydı biri
+    // başarısız olduğunda gider kaydı ile kasa bakiyesi ayrışırdı.
+    const hareket = veri.hesapId
+      ? await hareketYaz(tx, veri.hesapId, {
+          yon: GIDER_HAREKET_YONU,
+          tutar: ayrim.brut,
+          tarih: veri.tarih,
+          aciklama: veri.aciklama ?? veri.kategori,
+        })
+      : null;
+
+    return tx.gider.create({
+      data: {
+        kategori: veri.kategori,
+        tutar: ayrim.brut,
+        kdvOrani: veri.kdvOrani,
+        kdvTutari: ayrim.kdv,
+        aciklama: veri.aciklama ?? null,
+        tarih: veri.tarih,
+        belgeUrl: belge?.anahtar ?? null,
+        belgeAdi: belge?.ad ?? null,
+        hesapHareketiId: hareket?.id ?? null,
+      },
+      select: { id: true },
+    });
   });
 }
 
 /**
  * Gideri günceller. Yeni belge yüklendiyse eskisi depodan silinir — yetim
  * dosya bırakmamak için.
+ *
+ * Kasa hareketi SİL-YENİDEN YAZ yöntemiyle güncellenir: tutar, tarih ve hesap
+ * hepsi değişebilir, üstelik hesap eklenmiş ya da kaldırılmış olabilir. Tek
+ * tek karşılaştırmak dört ayrı durum demekti; sil-yaz hepsini aynı yoldan
+ * doğru sonuca götürür. Yerinde güncellenmeseydi tutarı değiştirilen giderin
+ * kasadaki karşılığı eski tutarda kalır, bakiye sessizce yanlış olurdu.
  */
 export async function giderGuncelle(
   id: string,
@@ -139,22 +171,37 @@ export async function giderGuncelle(
 ): Promise<void> {
   const mevcut = await db.gider.findUnique({
     where: { id },
-    select: { belgeUrl: true },
+    select: { belgeUrl: true, hesapHareketiId: true },
   });
   if (!mevcut) throw new Error("Gider bulunamadı.");
 
   const ayrim = kdvAyir(veri.tutar, veri.kdvOrani);
-  await db.gider.update({
-    where: { id },
-    data: {
-      kategori: veri.kategori,
-      tutar: ayrim.brut,
-      kdvOrani: veri.kdvOrani,
-      kdvTutari: ayrim.kdv,
-      aciklama: veri.aciklama ?? null,
-      tarih: veri.tarih,
-      ...(belge ? { belgeUrl: belge.anahtar, belgeAdi: belge.ad } : {}),
-    },
+
+  await db.$transaction(async (tx) => {
+    await hareketSilTx(tx, mevcut.hesapHareketiId);
+
+    const hareket = veri.hesapId
+      ? await hareketYaz(tx, veri.hesapId, {
+          yon: GIDER_HAREKET_YONU,
+          tutar: ayrim.brut,
+          tarih: veri.tarih,
+          aciklama: veri.aciklama ?? veri.kategori,
+        })
+      : null;
+
+    await tx.gider.update({
+      where: { id },
+      data: {
+        kategori: veri.kategori,
+        tutar: ayrim.brut,
+        kdvOrani: veri.kdvOrani,
+        kdvTutari: ayrim.kdv,
+        aciklama: veri.aciklama ?? null,
+        tarih: veri.tarih,
+        hesapHareketiId: hareket?.id ?? null,
+        ...(belge ? { belgeUrl: belge.anahtar, belgeAdi: belge.ad } : {}),
+      },
+    });
   });
 
   if (belge && mevcut.belgeUrl && mevcut.belgeUrl !== belge.anahtar) {
@@ -166,11 +213,19 @@ export async function giderGuncelle(
 export async function giderSil(id: string, db: Db = prisma): Promise<void> {
   const gider = await db.gider.findUnique({
     where: { id },
-    select: { belgeUrl: true },
+    select: { belgeUrl: true, hesapHareketiId: true },
   });
   if (!gider) throw new Error("Gider bulunamadı.");
 
-  await db.gider.delete({ where: { id } });
+  await db.$transaction(async (tx) => {
+    await tx.gider.delete({ where: { id } });
+    // Kasadan çıkan para geri gelir; aksi halde gider kalkarken bakiye eksik
+    // kalırdı.
+    await hareketSilTx(tx, gider.hesapHareketiId);
+  });
+
+  // Dosya silme transaction DIŞINDA: geri alınamaz ve veritabanı işlemi
+  // başarılı olmadan dokunulmamalı.
   if (gider.belgeUrl) await belgeSil(gider.belgeUrl);
 }
 

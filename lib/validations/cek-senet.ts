@@ -42,6 +42,8 @@ export const cekSenetFormDefaults: CekSenetInput = {
 export const tahsilatSchema = z.object({
   tutar: tutarAlani({ zorunlu: true, pozitif: true, label: "Tahsilat tutarı" }),
   tarih: tarihAlani,
+  /** Paranın gireceği/çıkacağı hesap; boş bırakılırsa kasa hareketi oluşmaz. */
+  hesapId: optionalText(64, "Hesap"),
   aciklama: optionalText(200, "Açıklama"),
 });
 

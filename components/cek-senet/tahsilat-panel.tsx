@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   LedgerBody,
   LedgerCell,
@@ -38,12 +39,16 @@ import {
  * `tahsilatKontrol`); burada ayrıca kalan tutar gösterilir ve kayıt kapalıysa
  * form hiç açılmaz — kullanıcı reddedilecek bir işlemle uğraşmasın.
  */
+export type HesapSecenegi = { id: string; ad: string };
+
 export function TahsilatPaneli({
   cekSenet,
+  hesaplar,
   bugun,
   yonetici,
 }: {
   cekSenet: CekSenetDetay;
+  hesaplar: HesapSecenegi[];
   bugun: string;
   yonetici: boolean;
 }) {
@@ -120,7 +125,7 @@ export function TahsilatPaneli({
         </p>
       ) : (
         <form onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <Field
               id="tutar"
               label="Tahsilat tutarı"
@@ -139,6 +144,26 @@ export function TahsilatPaneli({
             <Field id="tarih" label="Tarih" error={errors.tarih?.message}>
               <Input id="tarih" type="date" {...register("tarih")} />
             </Field>
+
+            <Field
+              id="tahsilatHesap"
+              label="Hesap"
+              hint={
+                hesaplar.length === 0
+                  ? "Kasa/banka hesabı yok."
+                  : "Boş bırakılırsa kasa hareketi oluşmaz."
+              }
+            >
+              <Select id="tahsilatHesap" disabled={hesaplar.length === 0} {...register("hesapId")}>
+                <option value="">Kasaya işleme</option>
+                {hesaplar.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.ad}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
 
             <Field
               id="tahsilatAciklama"

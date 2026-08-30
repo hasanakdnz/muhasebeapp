@@ -85,12 +85,14 @@ export function HareketListesi({
                   variant="text"
                   className="h-8 px-2"
                   onClick={() => setSilinecek(hareket)}
-                  disabled={pending || !yonetici}
+                  disabled={pending || !yonetici || Boolean(hareket.kaynakEtiketi)}
                   aria-label="Hareketi sil"
                   title={
-                    yonetici
-                      ? undefined
-                      : "Hareket kaydını yalnızca yönetici silebilir."
+                    hareket.kaynakEtiketi
+                      ? `Bu hareket ${hareket.kaynakEtiketi} kaydından doğdu; ilgili kaydı silin.`
+                      : yonetici
+                        ? undefined
+                        : "Hareket kaydını yalnızca yönetici silebilir."
                   }
                 >
                   <Trash2 />

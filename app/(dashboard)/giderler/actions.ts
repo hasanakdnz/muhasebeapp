@@ -21,6 +21,8 @@ export type ActionResult =
 function tazele(id?: string) {
   revalidatePath("/giderler");
   revalidatePath("/dashboard");
+  // Gider kasadan para çıkarır; kasa sayfası da tazelenmeli.
+  revalidatePath("/kasa-banka", "layout");
   if (id) revalidatePath(`/giderler/${id}`);
 }
 
@@ -31,6 +33,7 @@ function alanlariOku(formData: FormData) {
     tutar: formData.get("tutar"),
     kdvOrani: formData.get("kdvOrani"),
     aciklama: formData.get("aciklama"),
+    hesapId: formData.get("hesapId"),
     tarih: formData.get("tarih"),
   };
 }

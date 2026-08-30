@@ -12,6 +12,8 @@ export const giderSchema = z.object({
   tutar: tutarAlani({ zorunlu: true, pozitif: true, label: "Tutar" }),
   kdvOrani: z.enum(GIDER_KDV_ORANLARI, { message: "KDV oranı seçin." }),
   aciklama: optionalText(300, "Açıklama"),
+  /** Paranın çıkacağı hesap; boş bırakılırsa kasa hareketi oluşmaz. */
+  hesapId: optionalText(64, "Hesap"),
   tarih: tarihAlani,
 });
 
@@ -23,5 +25,6 @@ export const giderFormDefaults: GiderInput = {
   tutar: "",
   kdvOrani: "20",
   aciklama: "",
+  hesapId: "",
   tarih: "",
 };

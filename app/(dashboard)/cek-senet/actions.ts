@@ -31,6 +31,8 @@ function tazele(cariId?: string) {
   revalidatePath("/cek-senet");
   revalidatePath("/dashboard");
   revalidatePath("/cariler");
+  // Tahsilat kasaya para sokar; kasa sayfası da tazelenmeli.
+  revalidatePath("/kasa-banka", "layout");
   if (cariId) revalidatePath(`/cariler/${cariId}`);
 }
 

@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { hareketSilTx, hareketYaz } from "@/lib/kasa";
+import { odemeHareketYonu } from "@/lib/domain/kasa";
 import { roundMoney, toDecimal } from "@/lib/money";
 import {
   odemeCariEtkisi,
@@ -112,6 +114,12 @@ export type OdemeYaziVerisi = {
   kaynak: OdemeKaynagiValue;
   /** Kaynak CEK_TAHSILATI ise zorunlu. */
   cekSenetTahsilatId?: string;
+  /**
+   * Paranın gireceği/çıkacağı kasa/banka hesabı. YALNIZCA DIREKT ödemede
+   * anlamlıdır: çek tahsilatından doğan ödemede para kasaya tahsilat
+   * kaydedilirken zaten girmiştir, ikinci kez girseydi kasa şişerdi.
+   */
+  hesapId?: string;
   aciklama?: string;
 };
 
@@ -181,6 +189,19 @@ export async function odemeEkle(
     }
 
     const tutar = roundMoney(veri.tutar);
+
+    // Kasa hareketi yalnızca DIREKT ödemede oluşur — çek tahsilatından doğan
+    // ödemede para kasaya tahsilat anında girmişti.
+    const hareket =
+      veri.kaynak === "DIREKT" && veri.hesapId
+        ? await hareketYaz(tx, veri.hesapId, {
+            yon: odemeHareketYonu(islem.tip),
+            tutar: tutar.toString(),
+            tarih: veri.tarih,
+            aciklama: veri.aciklama ?? "Fatura ödemesi",
+          })
+        : null;
+
     const odeme = await tx.islemOdeme.create({
       data: {
         islemId,
@@ -189,6 +210,7 @@ export async function odemeEkle(
         kaynak: veri.kaynak,
         cekSenetTahsilatId:
           veri.kaynak === "CEK_TAHSILATI" ? veri.cekSenetTahsilatId : null,
+        hesapHareketiId: hareket?.id ?? null,
         aciklama: veri.aciklama ?? null,
       },
       select: { id: true },
@@ -236,6 +258,7 @@ export async function odemeSil(
         id: true,
         tutar: true,
         kaynak: true,
+        hesapHareketiId: true,
         islem: {
           select: {
             id: true,
@@ -254,6 +277,8 @@ export async function odemeSil(
     const tutar = roundMoney(odeme.tutar);
 
     await tx.islemOdeme.delete({ where: { id: odemeId } });
+    // Kasadaki karşılığı da gider.
+    await hareketSilTx(tx, odeme.hesapHareketiId);
 
     const yeniOdenen = roundMoney(islem.odenenTutar).minus(tutar);
     await tx.islem.update({

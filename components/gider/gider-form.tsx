@@ -26,14 +26,18 @@ import {
 } from "@/lib/validations/gider";
 import type { ActionResult } from "@/app/(dashboard)/giderler/actions";
 
+export type HesapSecenegi = { id: string; ad: string };
+
 export function GiderForm({
   defaultValues,
+  hesaplar,
   onSubmitAction,
   submitLabel,
   cancelHref,
   mevcutBelgeAdi,
 }: {
   defaultValues: GiderInput;
+  hesaplar: HesapSecenegi[];
   onSubmitAction: (formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
   cancelHref: string;
@@ -72,6 +76,7 @@ export function GiderForm({
     formData.set("tutar", degerler.tutar ?? "");
     formData.set("kdvOrani", degerler.kdvOrani);
     formData.set("aciklama", degerler.aciklama ?? "");
+    formData.set("hesapId", degerler.hesapId ?? "");
     formData.set("tarih", degerler.tarih ?? "");
 
     const dosya = dosyaRef.current?.files?.[0];
@@ -110,6 +115,29 @@ export function GiderForm({
             aria-invalid={Boolean(errors.tarih)}
             {...register("tarih")}
           />
+        </Field>
+
+        <Field
+          id="hesapId"
+          label="Hangi hesaptan"
+          hint={
+            hesaplar.length === 0
+              ? "Kasa/banka hesabı tanımlı değil."
+              : "Boş bırakılırsa kasa hareketi oluşmaz."
+          }
+        >
+          <Select
+            id="hesapId"
+            disabled={hesaplar.length === 0}
+            {...register("hesapId")}
+          >
+            <option value="">Kasaya işleme</option>
+            {hesaplar.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.ad}
+              </option>
+            ))}
+          </Select>
         </Field>
 
         <Field
