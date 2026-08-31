@@ -86,6 +86,9 @@ export async function listeleGiderler(
         : {}),
     },
     orderBy: [{ tarih: "desc" }, { id: "desc" }],
+    // hesapHareketi olmadan satiraCevir hesapId'yi HER satırda null döndürür;
+    // "hesaba işlenmemiş" rozeti de her gideri işaretlerdi.
+    include: { hesapHareketi: { select: { hesapId: true } } },
   });
   return giderler.map(satiraCevir);
 }
@@ -254,4 +257,19 @@ export async function belgeAnahtariKullanimda(
 ): Promise<boolean> {
   const sayi = await db.gider.count({ where: { belgeUrl: anahtar } });
   return sayi > 0;
+}
+
+/**
+ * Hesaba işlenmemiş gider sayısı.
+ *
+ * Gider kaydederken kasa/banka hesabı seçmek OPSİYONELDİR (hesap tanımlamamış
+ * kullanıcı gider giremesin diye). Boş bırakılırsa gider KDV ve raporlara
+ * girer ama kasadan para ÇIKMAZ: kullanıcı parayı harcamıştır, pano eski
+ * rakamı gösterir ve bunu fark etmesinin bir yolu yoktur. Bu sayı o sessiz
+ * eksiği görünür kılar.
+ */
+export async function hesabaIslenmemisGiderSayisi(
+  db: Db = prisma
+): Promise<number> {
+  return db.gider.count({ where: { hesapHareketiId: null } });
 }

@@ -526,3 +526,58 @@ describe("Hareket satırı kaynağını bildirir", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("Hesaba işlenmemiş gider görünür kılınır", () => {
+  it("hesapsız gider kasaya yansımaz ve sayılır", async () => {
+    const { hesabaIslenmemisGiderSayisi } = await import("@/lib/gider");
+    const kasa = await kasaEkle("Uyarı Kasası", "5000");
+    const oncekiSayi = await hesabaIslenmemisGiderSayisi(db.prisma);
+
+    // Hesap SEÇİLMEDEN kaydedilen gider: para kasadan çıkmaz.
+    await giderOlustur(
+      { kategori: "Kira", tutar: "900", kdvOrani: "0", tarih: gun(3) },
+      undefined,
+      db.prisma
+    );
+
+    expect((await getHesap(kasa.id, db.prisma))?.bakiye).toBe("5000");
+    expect(await hesabaIslenmemisGiderSayisi(db.prisma)).toBe(oncekiSayi + 1);
+
+    // Hesap seçilen gider sayılmaz.
+    await giderOlustur(
+      {
+        kategori: "Kira",
+        tutar: "900",
+        kdvOrani: "0",
+        tarih: gun(3),
+        hesapId: kasa.id,
+      },
+      undefined,
+      db.prisma
+    );
+    expect(await hesabaIslenmemisGiderSayisi(db.prisma)).toBe(oncekiSayi + 1);
+    expect((await getHesap(kasa.id, db.prisma))?.bakiye).toBe("4100");
+  });
+
+  it("listede hesapId dolu gelir — rozet her satırı işaretlemesin", async () => {
+    const { listeleGiderler } = await import("@/lib/gider");
+    const kasa = await kasaEkle("Liste Kasası", "5000");
+    await giderOlustur(
+      {
+        kategori: "Yakıt",
+        tutar: "300",
+        kdvOrani: "0",
+        tarih: gun(9),
+        aciklama: "hesapli-kayit",
+        hesapId: kasa.id,
+      },
+      undefined,
+      db.prisma
+    );
+
+    const liste = await listeleGiderler({}, db.prisma);
+    const kayit = liste.find((g) => g.aciklama === "hesapli-kayit");
+    // include unutulursa hesapId null döner ve gider "işlenmemiş" görünürdü.
+    expect(kayit?.hesapId).toBe(kasa.id);
+  });
+});

@@ -4,6 +4,11 @@ import { hesaplaCariOzeti } from "@/lib/domain/cari";
 import { hesaplaHareketOzeti } from "@/lib/domain/kasa";
 import { donemselToplamlar } from "@/lib/islem";
 import { hesaplaHesapOzeti, listeleHesaplar } from "@/lib/kasa";
+import {
+  hesabaIslenmemisGiderSayisi,
+  hesaplaGiderOzeti,
+  listeleGiderler,
+} from "@/lib/gider";
 import type { PrismaClient } from "@/lib/generated/prisma/client";
 
 export type Db = PrismaClient;
@@ -15,7 +20,15 @@ export type DashboardOzeti = {
   borc: string;
   satis: string;
   alis: string;
-  /** Satış/alış rakamlarının kapsadığı dönem etiketi. */
+  /**
+   * Dönemin gider toplamı (KDV dahil). Panoda satış/alışın yanında durur:
+   * bir KOBİ'de kira, yakıt ve maaş çoğu zaman alıştan büyüktür ve gider
+   * gösterilmezse pano işi olduğundan iyi gösterir.
+   */
+  gider: string;
+  /** Kasa/banka hesabına bağlanmamış gider sayısı (bkz. lib/gider.ts). */
+  hesabaIslenmemisGider: number;
+  /** Satış/alış/gider rakamlarının kapsadığı dönem etiketi. */
   donemEtiketi: string;
 };
 
@@ -57,17 +70,19 @@ export async function dashboardOzeti(
   bugun: Date,
   db: Db = prisma
 ): Promise<DashboardOzeti> {
-  const [hesaplar, cariler, donem] = await Promise.all([
+  const aralik = { baslangic: ayBasi(bugun), bitis: aySonu(bugun) };
+
+  const [hesaplar, cariler, donem, giderler, islenmemis] = await Promise.all([
     listeleHesaplar({}, db),
     db.cari.findMany({ where: { aktif: true }, select: { bakiye: true } }),
-    donemselToplamlar(
-      { baslangic: ayBasi(bugun), bitis: aySonu(bugun) },
-      db
-    ),
+    donemselToplamlar(aralik, db),
+    listeleGiderler(aralik, db),
+    hesabaIslenmemisGiderSayisi(db),
   ]);
 
   const hesapOzeti = hesaplaHesapOzeti(hesaplar);
   const cariOzeti = hesaplaCariOzeti(cariler.map((c) => c.bakiye.toString()));
+  const giderOzeti = hesaplaGiderOzeti(giderler);
 
   return {
     kasa: hesapOzeti.kasaToplami,
@@ -76,6 +91,8 @@ export async function dashboardOzeti(
     borc: cariOzeti.toplamBorc,
     satis: donem.satis,
     alis: donem.alis,
+    gider: giderOzeti.toplam,
+    hesabaIslenmemisGider: islenmemis,
     donemEtiketi: "Bu ay",
   };
 }

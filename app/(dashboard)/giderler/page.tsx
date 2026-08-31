@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Paperclip, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Amount } from "@/components/ui/amount";
+import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,9 +29,10 @@ export const metadata: Metadata = { title: "Giderler · Muhasebe" };
 export default async function GiderlerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kategori?: string }>;
+  searchParams: Promise<{ kategori?: string; hesapsiz?: string }>;
 }) {
   const sp = await searchParams;
+  const yalnizHesapsiz = sp.hesapsiz === "1";
   const kategori = GIDER_KATEGORILERI.includes(
     sp.kategori as (typeof GIDER_KATEGORILERI)[number]
   )
@@ -44,8 +46,15 @@ export default async function GiderlerPage({
     listeleGiderler(),
   ]);
 
-  const ozet = hesaplaGiderOzeti(giderler);
+  // Hesaba işlenmemiş gider, parası kasadan çıkmamış giderdir; panodan
+  // buraya bağlantı verilir (bkz. app/(dashboard)/dashboard/page.tsx).
+  const gosterilen = yalnizHesapsiz
+    ? giderler.filter((g) => g.hesapId === null)
+    : giderler;
+
+  const ozet = hesaplaGiderOzeti(gosterilen);
   const dagilim = kategoriDagilimi(tumGiderler);
+  const hesapsizSayisi = tumGiderler.filter((g) => g.hesapId === null).length;
 
   return (
     <div className="flex flex-col gap-8">
@@ -114,10 +123,22 @@ export default async function GiderlerPage({
       <div className="flex flex-wrap items-center gap-2">
         <Link
           href="/giderler"
-          className={buttonVariants({ variant: kategori ? "text" : "secondary" })}
+          className={buttonVariants({
+            variant: kategori || yalnizHesapsiz ? "text" : "secondary",
+          })}
         >
           Tümü
         </Link>
+        {hesapsizSayisi > 0 && (
+          <Link
+            href="/giderler?hesapsiz=1"
+            className={buttonVariants({
+              variant: yalnizHesapsiz ? "secondary" : "text",
+            })}
+          >
+            Hesaba işlenmemiş ({hesapsizSayisi})
+          </Link>
+        )}
         {dagilim.map((d) => (
           <Link
             key={d.kategori}
@@ -131,9 +152,15 @@ export default async function GiderlerPage({
         ))}
       </div>
 
-      {giderler.length === 0 ? (
+      {gosterilen.length === 0 ? (
         <EmptyState
-          title={kategori ? "Bu kategoride gider yok" : "Henüz gider yok"}
+          title={
+            yalnizHesapsiz
+              ? "Hesaba işlenmemiş gider yok"
+              : kategori
+                ? "Bu kategoride gider yok"
+                : "Henüz gider yok"
+          }
           description="İlk masraf kaydınızı oluşturun."
           action={
             <Link href="/giderler/yeni" className={buttonVariants()}>
@@ -156,7 +183,7 @@ export default async function GiderlerPage({
             </tr>
           </LedgerHead>
           <LedgerBody>
-            {giderler.map((gider) => (
+            {gosterilen.map((gider) => (
               <LedgerRow key={gider.id}>
                 <LedgerCell className="whitespace-nowrap text-muted">
                   <Link
@@ -166,7 +193,14 @@ export default async function GiderlerPage({
                     {formatTarih(gider.tarih)}
                   </Link>
                 </LedgerCell>
-                <LedgerCell>{gider.kategori}</LedgerCell>
+                <LedgerCell>
+                  <span className="flex flex-wrap items-center gap-2">
+                    {gider.kategori}
+                    {gider.hesapId === null && (
+                      <Badge variant="pending">hesaba işlenmemiş</Badge>
+                    )}
+                  </span>
+                </LedgerCell>
                 <LedgerCell className="text-muted">
                   {gider.aciklama ?? "—"}
                 </LedgerCell>

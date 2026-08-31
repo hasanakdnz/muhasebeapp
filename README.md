@@ -297,6 +297,21 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   bir numara yeniden verilirdi. Kural teklif, satış ve alış için tek yerdedir
   (`lib/domain/belge-no.ts`); üç kopya olsaydı biri düzeltilip diğerleri
   unutulabilirdi.
+- **Pano iki bloğa ayrılır:** "Durum" (kasa, banka, alacak, borç) birikmiş bir
+  andır; "Bu ay" (satış, alış, gider) bir akıştır. Altı kart tek yığın hâlinde
+  dururken farklı türden iki rakam aynı şeymiş gibi görünüyordu.
+
+  Gider kartı sonradan eklendi: pano satış ve alışı gösterip gideri
+  göstermeyince işi olduğundan iyi gösteriyordu — bir KOBİ''de kira, yakıt ve
+  maaş çoğu zaman alıştan büyüktür.
+
+- **Hesaba işlenmemiş gider uyarısı.** Gider kaydederken hesap seçmek
+  opsiyoneldir; boş bırakılırsa gider KDV ve raporlara girer ama kasadan para
+  ÇIKMAZ. Kullanıcı harcamayı yapmıştır, Kasa rakamı eski hâlinde kalır ve
+  bunu fark etmesinin başka yolu yoktur. Panoda sayı olarak uyarılır, gider
+  listesinde satır rozeti ve "Hesaba işlenmemiş (n)" filtresiyle bulunur.
+  Uyarı yalnızca gerçekten eksik kayıt varsa görünür — sürekli duran nötr bir
+  uyarı göz ardı edilmeye başlanır.
 - **Kasa/Banka entegrasyonu:** Çek tahsilatı, DİREKT fatura ödemesi ve gider,
   seçilen hesapta AYNI transaction içinde bir `HesapHareketi` üretir. Önce
   hiçbiri kasaya dokunmuyordu; kullanıcı aynı parayı iki kez girmek zorundaydı

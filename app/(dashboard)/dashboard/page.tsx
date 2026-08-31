@@ -47,38 +47,67 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Genel Bakış"
-        description="Kasa, banka, alacak ve borç özetiniz."
+        description="Durumunuz ve bu ayki hareketleriniz."
       />
 
-      {/* Kart içi yoğunluk düşük, aralar bol — DESIGN.md Layout. */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <OzetKarti etiket="Kasa" deger={ozet.kasa} tone="positive" />
-        <OzetKarti etiket="Banka" deger={ozet.banka} tone="positive" />
-        <OzetKarti
-          etiket="Alacak"
-          deger={ozet.alacak}
-          tone="positive"
-          aciklama="Carilerin size borcu"
-        />
-        <OzetKarti
-          etiket="Borç"
-          deger={ozet.borc}
-          tone="negative"
-          aciklama="Carilere borcunuz"
-        />
-        <OzetKarti
-          etiket="Satış"
-          deger={ozet.satis}
-          tone="positive"
-          aciklama={ozet.donemEtiketi}
-        />
-        <OzetKarti
-          etiket="Alış"
-          deger={ozet.alis}
-          tone="negative"
-          aciklama={ozet.donemEtiketi}
-        />
-      </div>
+      {/*
+        Kartlar ANLAMINA göre iki bloğa ayrılır: "Durum" birikmiş bir andır
+        (şu an ne kadar param var, kim bana ne kadar borçlu), "Bu ay" ise bir
+        akıştır. Tek yığın hâlinde altı kart, farklı türden iki rakamı aynı
+        şeymiş gibi gösteriyordu. DESIGN.md: bir ekranda 3-4 net blok.
+      */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-heading-md text-ink">Durum</h2>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <OzetKarti etiket="Kasa" deger={ozet.kasa} tone="positive" />
+          <OzetKarti etiket="Banka" deger={ozet.banka} tone="positive" />
+          <OzetKarti
+            etiket="Alacak"
+            deger={ozet.alacak}
+            tone="positive"
+            aciklama="Carilerin size borcu"
+          />
+          <OzetKarti
+            etiket="Borç"
+            deger={ozet.borc}
+            tone="negative"
+            aciklama="Carilere borcunuz"
+          />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-heading-md text-ink">{ozet.donemEtiketi}</h2>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <OzetKarti etiket="Satış" deger={ozet.satis} tone="positive" />
+          <OzetKarti etiket="Alış" deger={ozet.alis} tone="negative" />
+          <OzetKarti
+            etiket="Gider"
+            deger={ozet.gider}
+            tone="negative"
+            aciklama="Masraf kayıtları"
+          />
+        </div>
+
+        {/*
+          Uyarı yalnızca gerçekten eksik bir şey varsa görünür. Gider
+          kaydedilirken hesap seçilmemişse para kasadan çıkmamıştır: kullanıcı
+          harcamayı yapmıştır ama Kasa rakamı eski hâlinde kalır ve bunu fark
+          etmesinin başka bir yolu yoktur.
+        */}
+        {ozet.hesabaIslenmemisGider > 0 && (
+          <p className="text-body-sm text-amber">
+            {ozet.hesabaIslenmemisGider} gider kasa/banka hesabına işlenmemiş —
+            bu tutarlar Kasa bakiyesine yansımıyor.{" "}
+            <Link
+              href="/giderler?hesapsiz=1"
+              className="underline underline-offset-2"
+            >
+              Listele
+            </Link>
+          </p>
+        )}
+      </section>
 
       {/* Vade uyarısı yalnızca dikkat gerektiren bir şey varsa görünür —
           sürekli duran nötr bir kart göz ardı edilmeye başlanır. */}
