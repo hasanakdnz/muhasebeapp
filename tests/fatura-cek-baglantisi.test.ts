@@ -279,3 +279,130 @@ describe("Çek tahsilatı faturayı etkilemez", () => {
     expect((await getCari(cari.id, db.prisma))?.bakiye).toBe("0");
   });
 });
+
+describe("Ciro edilen çek, devredildiği carinin faturasına da sayılır", () => {
+  it("ciroyla kapanan alış faturası ÖDENDİ yapılabilir", async () => {
+    const musteri = await cariEkle("Ciro Müşteri");
+    const tedarikci = await cariOlustur(
+      { unvan: "Ciro Tedarikçi", tip: "TEDARIKCI", acilisBakiyesi: "0" },
+      db.prisma
+    );
+
+    // Müşteri bize 9.000'lik çek veriyor.
+    await satis(musteri.id, "9000");
+    const k = await cek(musteri.id, "9000");
+
+    // Tedarikçiden 9.000'lik alış; çeki ona ciro ediyoruz.
+    const alis = await islemOlustur(
+      {
+        tip: "ALIS",
+        cariId: tedarikci.id,
+        tarih: gun(3),
+        kalemler: [
+          { urunAdi: "Hammadde", miktar: "1", birimFiyat: "9000", kdvOrani: "0" },
+        ],
+      },
+      db.prisma
+    );
+    const { ciroEt } = await import("@/lib/cek-senet");
+    await ciroEt(k.id, tedarikci.id, gun(4), db.prisma);
+
+    // Ciro tedarikçiye olan borcu kapattı...
+    expect((await getCari(tedarikci.id, db.prisma))?.bakiye).toBe("0");
+    // ...ama fatura hâlâ açık. Düzeltmeden önce bunu kapatmanın YOLU YOKTU:
+    // çek müşterinin çekiydi ve tedarikçinin listesinde görünmüyordu.
+    expect((await getIslem(alis.id, db.prisma))?.status).toBe("BEKLIYOR");
+
+    const secenekler = await kullanilabilirCekler(tedarikci.id, db.prisma);
+    expect(secenekler.map((c) => c.cekSenetId)).toContain(k.id);
+
+    await odemeEkle(
+      alis.id,
+      { tutar: "9000", tarih: gun(4), kaynak: "CEK", cekSenetId: k.id },
+      db.prisma
+    );
+
+    expect((await getIslem(alis.id, db.prisma))?.status).toBe("ODENDI");
+    // Bakiye ikinci kez etkilenmedi.
+    expect((await getCari(tedarikci.id, db.prisma))?.bakiye).toBe("0");
+    expect(
+      (await cariBakiyesiniDogrula(tedarikci.id, db.prisma)).mutabik
+    ).toBe(true);
+  });
+
+  it("aynı çek İKİ tarafın da faturasını kapatabilir", async () => {
+    const musteri = await cariEkle("Çift Taraf Müşteri");
+    const tedarikci = await cariOlustur(
+      { unvan: "Çift Taraf Tedarikçi", tip: "TEDARIKCI", acilisBakiyesi: "0" },
+      db.prisma
+    );
+
+    const satisFaturasi = await satis(musteri.id, "5000");
+    const k = await cek(musteri.id, "5000");
+    const alisFaturasi = await islemOlustur(
+      {
+        tip: "ALIS",
+        cariId: tedarikci.id,
+        tarih: gun(3),
+        kalemler: [
+          { urunAdi: "Mal", miktar: "1", birimFiyat: "5000", kdvOrani: "0" },
+        ],
+      },
+      db.prisma
+    );
+    const { ciroEt } = await import("@/lib/cek-senet");
+    await ciroEt(k.id, tedarikci.id, gun(4), db.prisma);
+
+    // Çek gerçekten İKİ borcu birden kapattı: müşteri bize ödedi, biz
+    // tedarikçiye ödedik. İki tarafın sınırı birbirinin hakkını yemez.
+    await odemeEkle(
+      satisFaturasi.id,
+      { tutar: "5000", tarih: gun(4), kaynak: "CEK", cekSenetId: k.id },
+      db.prisma
+    );
+    await odemeEkle(
+      alisFaturasi.id,
+      { tutar: "5000", tarih: gun(4), kaynak: "CEK", cekSenetId: k.id },
+      db.prisma
+    );
+
+    expect((await getIslem(satisFaturasi.id, db.prisma))?.status).toBe("ODENDI");
+    expect((await getIslem(alisFaturasi.id, db.prisma))?.status).toBe("ODENDI");
+    expect((await getCari(musteri.id, db.prisma))?.bakiye).toBe("0");
+    expect((await getCari(tedarikci.id, db.prisma))?.bakiye).toBe("0");
+  });
+
+  it("tek taraf içinde çek tutarı yine aşılamaz", async () => {
+    const musteri = await cariEkle("Sınır Müşteri");
+    const tedarikci = await cariOlustur(
+      { unvan: "Sınır Tedarikçi", tip: "TEDARIKCI", acilisBakiyesi: "0" },
+      db.prisma
+    );
+    const k = await cek(musteri.id, "4000");
+    const a1 = await islemOlustur(
+      { tip: "ALIS", cariId: tedarikci.id, tarih: gun(3),
+        kalemler: [{ urunAdi: "A", miktar: "1", birimFiyat: "3000", kdvOrani: "0" }] },
+      db.prisma
+    );
+    const a2 = await islemOlustur(
+      { tip: "ALIS", cariId: tedarikci.id, tarih: gun(3),
+        kalemler: [{ urunAdi: "B", miktar: "1", birimFiyat: "3000", kdvOrani: "0" }] },
+      db.prisma
+    );
+    const { ciroEt } = await import("@/lib/cek-senet");
+    await ciroEt(k.id, tedarikci.id, gun(4), db.prisma);
+
+    await odemeEkle(
+      a1.id,
+      { tutar: "3000", tarih: gun(4), kaynak: "CEK", cekSenetId: k.id },
+      db.prisma
+    );
+    await expect(
+      odemeEkle(
+        a2.id,
+        { tutar: "3000", tarih: gun(4), kaynak: "CEK", cekSenetId: k.id },
+        db.prisma
+      )
+    ).rejects.toThrow(/dağıtılabilecek tutar aşılıyor/i);
+  });
+});

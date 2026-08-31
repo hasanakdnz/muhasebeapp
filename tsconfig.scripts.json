@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "paths": {
+      "@/*": ["./*"],
+      "server-only": ["./tests/helpers/server-only-stub.ts"]
+    }
+  }
+}

@@ -15,8 +15,10 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "postinstall": "prisma generate",
-    "db:bakiye-yenile": "tsx scripts/bakiye-yenile.ts",
-    "dev:webpack": "next dev"
+    "db:bakiye-yenile": "tsx --tsconfig tsconfig.scripts.json scripts/bakiye-yenile.ts",
+    "dev:webpack": "next dev",
+    "db:demo": "tsx --tsconfig tsconfig.scripts.json prisma/demo-veri.ts",
+    "db:kontrol": "tsx --tsconfig tsconfig.scripts.json scripts/veri-kontrol.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

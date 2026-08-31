@@ -33,6 +33,8 @@ npm run dev
 | `npm run db:migrate` | Şema değişikliklerini uygular |
 | `npm run db:seed` | Geliştirme verisini yükler |
 | `npm run db:bakiye-yenile` | Cari bakiyelerini kaynak kayıtlardan yeniden hesaplar |
+| `npm run db:demo` | İşlem verisini silip gerçekçi demo verisi kurar (kullanıcılar korunur) |
+| `npm run db:kontrol` | Tüm bakiyeleri kaynak kayıtlarla karşılaştırır |
 | `npm run db:studio` | Prisma Studio |
 
 ## Raporlar ve dışa aktarım
@@ -114,6 +116,27 @@ katmanda uygulanır — düğme personelde hiç render edilmez (`isAdmin()`), se
 action ayrıca `adminVeyaHata()` ile doğrular. Guard hata FIRLATMAZ, action
 sözleşmesine uyan bir sonuç döner; aksi halde personel silme düğmesine basınca
 çökme ekranı görürdü.
+
+## Demo verisi ve bütünlük denetimi
+
+`npm run db:demo` işlem verisini silip gerçekçi bir set kurar: 6 cari, 10
+fatura, 5 çek/senet (tahsil edilmiş, kısmi, karşılıksız, ciro edilmiş, verilen),
+4 gider, 3 teklif, kasa + banka. Kullanıcı hesaplarına dokunmaz.
+
+Kayıtlar HAM SQL ile değil uygulamanın kendi veri katmanı fonksiyonlarıyla
+üretilir; script bu yüzden aynı zamanda uçtan uca bir duman testidir. Ham SQL
+kullanılsaydı tutarsız veri sessizce oluşur ve mutabakat sonradan yanlış alarm
+verirdi.
+
+`npm run db:kontrol` her saklanan toplamı kaynağından yeniden hesaplayıp
+karşılaştırır: cari bakiyeleri, hesap bakiyeleri, çek tahsilat toplamları,
+fatura ödeme toplamları ve cari ekstrelerinin son satırı. Uyuşmazlıkta 1 ile
+çıkar.
+
+> **Dev sunucusu açıkken `npm run build` çalıştırmayın.** İkisi aynı `.next`
+> klasörünü kullanır; build, dev sunucusunun manifest dosyalarını siler ve
+> sayfalar "Internal Server Error" vermeye başlar. Çözüm: `.next` silinip dev
+> sunucusu yeniden başlatılır.
 
 ## Performans
 

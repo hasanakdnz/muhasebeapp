@@ -72,20 +72,38 @@ export type KullanilabilirCek = {
 };
 
 /**
- * Bu cariye ait çek/senetlerden, henüz faturalara dağıtılmamış kısmı olanlar.
- * Fatura ödemesini çeke bağlarken kullanılır.
+ * Bu cariye sayılabilecek çek/senetler — henüz dağıtılmamış kısmı olanlar.
+ *
+ * İKİ kaynak vardır:
+ *  1. Carinin BİZE verdiği (ya da bizim ona verdiğimiz) çekler.
+ *  2. Başkasından alınıp BU cariye CİRO EDİLEN çekler. Ciro, tedarikçiye olan
+ *     borcu kapatır; o borcun hangi faturaya karşılık geldiği de
+ *     işaretlenebilmeli. Yalnızca (1) sayılsaydı ciroyla kapanmış bir alış
+ *     faturası sonsuza dek "bekliyor" kalırdı — ölçüldü, borç yaşlandırma
+ *     raporu onu 60+ gün gecikmiş gösteriyordu.
  *
  * Karşılıksız çekler DIŞARIDA bırakılır: yanan çek bir faturayı kapatamaz,
  * borç zaten geri gelmiştir.
+ *
+ * Dağıtılabilir kalan HER TARAF İÇİN AYRI hesaplanır: aynı çek hem veren
+ * müşterinin faturasını hem ciro edildiği tedarikçinin faturasını kapatır ve
+ * bunlar birbirinin hakkını yemez — çek iki ayrı borcu gerçekten kapatmıştır.
  */
 export async function kullanilabilirCekler(
   cariId: string,
   db: Db = prisma
 ): Promise<KullanilabilirCek[]> {
   const cekler = await db.cekSenet.findMany({
-    where: { cariId, durum: { not: "KARSILIKSIZ" } },
+    where: {
+      durum: { not: "KARSILIKSIZ" },
+      OR: [{ cariId }, { ciroEdilenCariId: cariId, durum: "CIRO_EDILDI" }],
+    },
     orderBy: [{ vadeTarihi: "asc" }, { id: "asc" }],
-    include: { islemOdemeleri: { select: { tutar: true } } },
+    include: {
+      islemOdemeleri: {
+        select: { tutar: true, islem: { select: { cariId: true } } },
+      },
+    },
   });
 
   return cekler
@@ -96,7 +114,9 @@ export async function kullanilabilirCekler(
       tutar: roundMoney(c.tutar).toString(),
       dagitilabilir: cekDagitilabilirKalan(
         c.tutar.toString(),
-        c.islemOdemeleri.map((o) => o.tutar.toString())
+        c.islemOdemeleri
+          .filter((o) => o.islem.cariId === cariId)
+          .map((o) => o.tutar.toString())
       ),
     }))
     .filter((c) => toDecimal(c.dagitilabilir).greaterThan(0));
@@ -166,12 +186,21 @@ export async function odemeEkle(
         select: {
           tutar: true,
           cariId: true,
+          ciroEdilenCariId: true,
           durum: true,
-          islemOdemeleri: { select: { tutar: true } },
+          islemOdemeleri: {
+            select: { tutar: true, islem: { select: { cariId: true } } },
+          },
         },
       });
       if (!cek) throw new Error("Çek/senet bulunamadı.");
-      if (cek.cariId !== islem.cariId) {
+
+      // Çek ya doğrudan bu cariye aittir ya da bu cariye CİRO EDİLMİŞTİR;
+      // ciro, tedarikçiye olan borcu kapattığı için o faturaya da sayılabilir.
+      const kendiCeki = cek.cariId === islem.cariId;
+      const ciroEdildi =
+        cek.durum === "CIRO_EDILDI" && cek.ciroEdilenCariId === islem.cariId;
+      if (!kendiCeki && !ciroEdildi) {
         throw new Error("Çek/senet, işlemin carisine ait değil.");
       }
       // Yanan çek bir faturayı kapatamaz; borç zaten geri gelmiştir.
@@ -179,9 +208,14 @@ export async function odemeEkle(
         throw new Error("Karşılıksız çek bir faturaya sayılamaz.");
       }
 
+      // Dağıtım sınırı TARAF BAZINDA: aynı çek hem veren müşterinin hem ciro
+      // edildiği tedarikçinin faturasını kapatabilir ve bunlar birbirinin
+      // hakkını yemez.
       const dagitim = cekDagitimKontrol(
         cek.tutar.toString(),
-        cek.islemOdemeleri.map((o) => o.tutar.toString()),
+        cek.islemOdemeleri
+          .filter((o) => o.islem.cariId === islem.cariId)
+          .map((o) => o.tutar.toString()),
         veri.tutar
       );
       if (!dagitim.gecerli) throw new Error(dagitim.hata);
