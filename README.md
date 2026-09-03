@@ -413,3 +413,12 @@ için yeni bir `BildirimGondericisi` yazıp `aktifGonderici()` içinde seçmek y
   `onDelete: Restrict`); pasife alınır. Kaydı olmayan kayıtlar kalıcı silinebilir.
 - **Tasarım token'ları:** Tek kaynak `app/globals.css` (`@theme`). Radius tek
   değerdir: `rounded-app` (8px), rozetler `rounded-full`.
+
+## Lisans
+
+MIT — bkz. [LICENSE](LICENSE). Kod alınabilir, değiştirilebilir ve başka bir
+projeye entegre edilebilir; tek şart telif notunun korunmasıdır. Yazılım
+"olduğu gibi" sunulur, garanti verilmez.
+
+`package.json` içindeki `"private": true` bundan bağımsızdır: yalnızca paketin
+yanlışlıkla npm'e yayımlanmasını engeller, kodun kullanımını kısıtlamaz.
